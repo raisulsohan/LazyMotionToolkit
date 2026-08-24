@@ -5,8 +5,8 @@
   Developed By: RaisulSohan
   Description: All-in-One Motion Graphics Toolkit for Adobe After Effects.
                Includes Smart Precomp (1:1 & Group), Auto Text Box,
-               Fade Tools Pro (7 Easing Curves), Grid Designer,
-               9-Point Anchor Aligner, and Live Color Swatches.
+               Fade Tools Pro (7 Easing Curves), Head to Line (Animated Arrows),
+               Grid Designer, 9-Point Anchor Aligner, and Live Color Swatches.
   Copyright (c) 2026 Raisul Sohan. All rights reserved.
 ========================================================================
 */
@@ -17,7 +17,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.3.0";
+    var _buildVersion     = "1.4.0";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -572,7 +572,231 @@
     }
 
     // ============================================================
-    // 6. 9-Point Anchor Point Aligner
+    // 6. Head to Line Engine (Animated Arrows & Path Follower)
+    // ============================================================
+    function getLineColorAndWidth(layer) {
+        var color = [0.0, 0.6, 1.0, 1];
+        var width = 8;
+        try {
+            function searchProps(grp) {
+                for (var i = 1; i <= grp.numProperties; i++) {
+                    var p = grp.property(i);
+                    if (p.matchName === "ADBE Vector Graphic - Stroke") {
+                        color = p.property("ADBE Vector Stroke Color").value;
+                        width = p.property("ADBE Vector Stroke Width").value;
+                        return true;
+                    }
+                    if (p.propertyType === PropertyType.INDEXED_GROUP || p.propertyType === PropertyType.NAMED_GROUP) {
+                        if (searchProps(p)) return true;
+                    }
+                }
+                return false;
+            }
+            searchProps(layer.property("ADBE Root Vectors Group"));
+        } catch (e) {}
+        return { color: color, width: width };
+    }
+
+    function createHeadShape(comp, lineLayer, headTypeStr, roundCorners, isStartHead, reverseDir) {
+        var headLayer = comp.layers.addShape();
+        headLayer.name = lineLayer.name + (isStartHead ? " - Head Start" : " - Head");
+        headLayer.moveBefore(lineLayer);
+        headLayer.parent = lineLayer;
+
+        var lineInfo = getLineColorAndWidth(lineLayer);
+        var headSize = Math.max(16, lineInfo.width * 3.5);
+
+        addSliderControl(headLayer, "Head Size", headSize);
+        addSliderControl(headLayer, "Offset Angle", 0);
+
+        var rootVec = headLayer.property("ADBE Root Vectors Group");
+        var shapeGrp = rootVec.addProperty("ADBE Vector Group");
+        shapeGrp.name = "Head Shape";
+        var grpContents = shapeGrp.property("ADBE Vectors Group");
+
+        // Shape Geometry based on Type
+        switch (headTypeStr) {
+            case "Circle":
+                var circ = grpContents.addProperty("ADBE Vector Shape - Ellipse");
+                circ.property("ADBE Vector Ellipse Size").expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];";
+                break;
+            case "Rectangle":
+                var rect = grpContents.addProperty("ADBE Vector Shape - Rect");
+                rect.property("ADBE Vector Rect Size").expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];";
+                if (roundCorners) rect.property("ADBE Vector Rect Roundness").setValue(8);
+                break;
+            case "Star":
+                var star = grpContents.addProperty("ADBE Vector Shape - Star");
+                star.property("ADBE Vector Star Type").setValue(2); // Star
+                star.property("ADBE Vector Star Points").setValue(5);
+                star.property("ADBE Vector Star Outer Radius").expression = "effect(\"Head Size\")(\"Slider\") / 2;";
+                star.property("ADBE Vector Star Inner Radius").expression = "effect(\"Head Size\")(\"Slider\") / 4;";
+                star.property("ADBE Vector Star Rotation").setValue(90);
+                if (roundCorners) {
+                    star.property("ADBE Vector Star Outer Roundness").setValue(15);
+                    star.property("ADBE Vector Star Inner Roundness").setValue(15);
+                }
+                break;
+            case "Triangle":
+            default:
+                var poly = grpContents.addProperty("ADBE Vector Shape - Star");
+                poly.property("ADBE Vector Star Type").setValue(1); // Polygon
+                var numPts = 3;
+                if (headTypeStr === "Pentagon") numPts = 5;
+                else if (headTypeStr === "Hexagon") numPts = 6;
+                else if (headTypeStr === "Heptagon") numPts = 7;
+                else if (headTypeStr === "Octagon") numPts = 8;
+
+                poly.property("ADBE Vector Star Points").setValue(numPts);
+                poly.property("ADBE Vector Star Outer Radius").expression = "effect(\"Head Size\")(\"Slider\") / 2;";
+                poly.property("ADBE Vector Star Rotation").setValue(90);
+                if (roundCorners) poly.property("ADBE Vector Star Outer Roundness").setValue(15);
+                break;
+        }
+
+        // Fill with Line Color
+        var fill = grpContents.addProperty("ADBE Vector Graphic - Fill");
+        fill.property("ADBE Vector Fill Color").setValue(lineInfo.color);
+
+        // Path Tracking Expressions
+        var trimName = "Trim Paths 1";
+        
+        // Position Expression
+        if (!isStartHead) {
+            headLayer.property("Position").expression =
+                "var line = thisLayer.parent;\n" +
+                "if (line != null) {\n" +
+                "    try {\n" +
+                "        var pct = 1.0;\n" +
+                "        try {\n" +
+                "            var trim = line.content(\"" + trimName + "\");\n" +
+                "            if (trim) { pct = trim.end / 100; }\n" +
+                "        } catch(eT) {}\n" +
+                "        var p = Math.max(0.0001, Math.min(0.9999, pct));\n" +
+                "        line.content(1).content(1).path.pointOnPath(p, time);\n" +
+                "    } catch(e) { value; }\n" +
+                "} else { value; }";
+
+            headLayer.property("Rotation").expression =
+                "var line = thisLayer.parent;\n" +
+                "if (line != null) {\n" +
+                "    try {\n" +
+                "        var pct = 1.0;\n" +
+                "        try {\n" +
+                "            var trim = line.content(\"" + trimName + "\");\n" +
+                "            if (trim) { pct = trim.end / 100; }\n" +
+                "        } catch(eT) {}\n" +
+                "        var p = Math.max(0.0001, Math.min(0.9999, pct));\n" +
+                "        var tan = line.content(1).content(1).path.tangentOnPath(p, time);\n" +
+                "        var angle = radiansToDegrees(Math.atan2(tan[1], tan[0]));\n" +
+                "        var offset = 0;\n" +
+                "        try { offset = effect(\"Offset Angle\")(\"Slider\"); } catch(eO) {}\n" +
+                (reverseDir ? "        angle + 180 + offset;\n" : "        angle + offset;\n") +
+                "    } catch(e) { value; }\n" +
+                "} else { value; }";
+        } else {
+            // Start Head (Points at start of path, rotated 180)
+            headLayer.property("Position").expression =
+                "var line = thisLayer.parent;\n" +
+                "if (line != null) {\n" +
+                "    try {\n" +
+                "        line.content(1).content(1).path.pointOnPath(0.0001, time);\n" +
+                "    } catch(e) { value; }\n" +
+                "} else { value; }";
+
+            headLayer.property("Rotation").expression =
+                "var line = thisLayer.parent;\n" +
+                "if (line != null) {\n" +
+                "    try {\n" +
+                "        var tan = line.content(1).content(1).path.tangentOnPath(0.0001, time);\n" +
+                "        var angle = radiansToDegrees(Math.atan2(tan[1], tan[0]));\n" +
+                "        var offset = 0;\n" +
+                "        try { offset = effect(\"Offset Angle\")(\"Slider\"); } catch(eO) {}\n" +
+                (reverseDir ? "        angle + offset;\n" : "        angle + 180 + offset;\n") +
+                "    } catch(e) { value; }\n" +
+                "} else { value; }";
+        }
+
+        // Opacity sync
+        headLayer.property("Opacity").expression =
+            "var line = thisLayer.parent;\n" +
+            "if (line != null) {\n" +
+            "    var op = line.transform.opacity;\n" +
+            "    try {\n" +
+            "        var trim = line.content(\"" + trimName + "\");\n" +
+            "        if (trim && trim.end <= 0) { 0; } else { op; }\n" +
+            "    } catch(e) { op; }\n" +
+            "} else { value; }";
+
+        return headLayer;
+    }
+
+    function executeHeadToLine(headType, roundCorners, doubleSided, reverseDir, doAnimate, animFrames) {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) {
+            alert("Please open a composition first.");
+            return;
+        }
+
+        var selectedLayers = comp.selectedLayers;
+        if (selectedLayers.length === 0 || !(selectedLayers[0] instanceof ShapeLayer)) {
+            alert("Please select a Shape Layer with a Path first.");
+            return;
+        }
+
+        app.beginUndoGroup("LazyMotion: Head to Line");
+        try {
+            for (var i = 0; i < selectedLayers.length; i++) {
+                var lineLayer = selectedLayers[i];
+                if (!(lineLayer instanceof ShapeLayer)) continue;
+
+                var rootVec = lineLayer.property("ADBE Root Vectors Group");
+                if (!rootVec || rootVec.numProperties === 0) continue;
+
+                // Animate with Trim Paths if requested
+                if (doAnimate) {
+                    var trim = rootVec.property("ADBE Vector Filter - Trim");
+                    if (!trim) trim = rootVec.addProperty("ADBE Vector Filter - Trim");
+                    trim.name = "Trim Paths 1";
+
+                    var fps = comp.frameRate;
+                    var durSec = Math.max(1, animFrames) / fps;
+                    var curT = comp.time;
+
+                    var endProp = trim.property("ADBE Vector Trim End");
+                    while (endProp.numKeys > 0) endProp.removeKey(1);
+
+                    if (!reverseDir) {
+                        endProp.setValueAtTime(curT, 0);
+                        endProp.setValueAtTime(curT + durSec, 100);
+                    } else {
+                        endProp.setValueAtTime(curT, 100);
+                        endProp.setValueAtTime(curT + durSec, 0);
+                    }
+
+                    if (endProp.numKeys >= 2) {
+                        var easeIn = new KeyframeEase(0, 75);
+                        var easeOut = new KeyframeEase(0, 75);
+                        endProp.setTemporalEaseAtKey(1, [easeIn], [easeOut]);
+                        endProp.setTemporalEaseAtKey(2, [easeIn], [easeOut]);
+                    }
+                }
+
+                // Create Head Layer(s)
+                createHeadShape(comp, lineLayer, headType, roundCorners, false, reverseDir);
+                if (doubleSided) {
+                    createHeadShape(comp, lineLayer, headType, roundCorners, true, reverseDir);
+                }
+            }
+        } catch (err) {
+            alert("Head to Line Error: " + err.toString());
+        } finally {
+            app.endUndoGroup();
+        }
+    }
+
+    // ============================================================
+    // 7. 9-Point Anchor Point Aligner
     // ============================================================
     function alignAnchorPoint(xRatio, yRatio) {
         var comp = app.project.activeItem;
@@ -627,7 +851,7 @@
     }
 
     // ============================================================
-    // 7. Grid Designer Dialog
+    // 8. Grid Designer Dialog
     // ============================================================
     function showGridMakerDialog() {
         var comp = app.project.activeItem;
@@ -773,7 +997,7 @@
     }
 
     // ============================================================
-    // 8. Main ScriptUI Window / Panel Builder
+    // 9. Main ScriptUI Window / Panel Builder
     // ============================================================
     function buildToolkitUI(thisObj) {
         var win = (thisObj instanceof Panel)
@@ -825,7 +1049,61 @@
         btnGrid.helpTip = "Open Grid Designer to create Rows, Columns, and Layouts";
         btnGrid.onClick = showGridMakerDialog;
 
-        // ---- 2. Fade Tools Pro Panel ----
+        // ---- 2. Head to Line (Animated Arrows) Panel ----
+        var headPnl = win.add("panel", undefined, "🏹 Head to Line");
+        headPnl.orientation = "column";
+        headPnl.alignChildren = ["fill", "top"];
+        headPnl.spacing = 6;
+        headPnl.margins = [8, 10, 8, 8];
+
+        // Head Sub-Panel
+        var headSub = headPnl.add("panel", undefined, "Head:");
+        headSub.orientation = "column";
+        headSub.alignChildren = ["fill", "top"];
+        headSub.spacing = 4;
+
+        var headTypeRow = headSub.add("group");
+        headTypeRow.orientation = "row";
+        headTypeRow.add("statictext", undefined, "Type:");
+        var dropHeadType = headTypeRow.add("dropdownlist", undefined, [
+            "Triangle", "Circle", "Star", "Rectangle", "Pentagon", "Hexagon", "Heptagon", "Octagon"
+        ]);
+        dropHeadType.selection = 0;
+        dropHeadType.preferredSize.width = 130;
+
+        var chkRoundCorners = headSub.add("checkbox", undefined, "Round Corners");
+        var chkDoubleSided = headSub.add("checkbox", undefined, "Double-Sided");
+
+        // Line Sub-Panel
+        var lineSub = headPnl.add("panel", undefined, "Line:");
+        lineSub.orientation = "column";
+        lineSub.alignChildren = ["fill", "top"];
+        lineSub.spacing = 4;
+
+        var chkReverseDir = lineSub.add("checkbox", undefined, "Reverse Direction");
+
+        var animRow = lineSub.add("group");
+        animRow.orientation = "row";
+        var chkAnimate = animRow.add("checkbox", undefined, "Animate (f):");
+        chkAnimate.value = true;
+        var inputAnimFrames = animRow.add("edittext", undefined, "30");
+        inputAnimFrames.characters = 4;
+        inputAnimFrames.preferredSize = [45, 20];
+
+        // Head it! button
+        var btnHeadIt = headPnl.add("button", undefined, "🎯 Head it!");
+        btnHeadIt.helpTip = "Attach selected Head shape to line with path tracking & animation";
+        btnHeadIt.onClick = function () {
+            var hType = dropHeadType.selection.text;
+            var rCorners = chkRoundCorners.value;
+            var dSided = chkDoubleSided.value;
+            var rDir = chkReverseDir.value;
+            var doAnim = chkAnimate.value;
+            var frames = parseInt(inputAnimFrames.text) || 30;
+            executeHeadToLine(hType, rCorners, dSided, rDir, doAnim, frames);
+        };
+
+        // ---- 3. Fade Tools Pro Panel ----
         var fadePnl = win.add("panel", undefined, "🎨 Fade Animator Pro");
         fadePnl.orientation = "column";
         fadePnl.alignChildren = ["fill", "top"];
@@ -882,7 +1160,7 @@
         btnDeleteFade.size = [60, 24];
         btnDeleteFade.onClick = deleteFadeTools;
 
-        // ---- 3. 9-Point Anchor Point Alignment ----
+        // ---- 4. 9-Point Anchor Point Alignment ----
         var anchorPnl = win.add("panel", undefined, "Anchor Point & Align");
         anchorPnl.orientation = "column";
         anchorPnl.alignChildren = ["center", "center"];
@@ -911,7 +1189,7 @@
         btnCenterComp.size = [98, 22];
         btnCenterComp.onClick = centerInComp;
 
-        // ---- 4. Live Color Swatches ----
+        // ---- 5. Live Color Swatches ----
         var swatchPnl = win.add("panel", undefined, "Quick Swatch");
         swatchPnl.orientation = "column";
         swatchPnl.alignChildren = ["fill", "top"];

@@ -39,7 +39,14 @@
 * **Fade In / Fade Out Sync**: Automatically inherits the parent text layer's `Transform > Opacity` and character animator opacity.
 * **Dedicated Effect Controls**: Adds `Padding X`, `Padding Y`, `Roundness`, `Box Opacity`, and `Box Color` controls directly to the box layer.
 
-### 3. 🎨 Fade Animator Pro (7 Easing Curves)
+### 3. 🏹 Head to Line (Animated Arrows & Path Follower)
+* **1-Click Arrow & Pointer Generator**: Select any Pen-drawn line or Bezier path, choose a head style, and click **`🎯 Head it!`** to instantly attach an auto-orienting head.
+* **8 Head Styles**: `Triangle`, `Circle`, `Star`, `Rectangle`, `Pentagon`, `Hexagon`, `Heptagon`, and `Octagon`.
+* **Smart Tangent Tracking**: Head automatically rotates (`tangentOnPath`) and follows every curve and bend without manual keyframing.
+* **Round Corners & Double-Sided**: Optional rounded corner smoothing and double-sided heads (heads at both Start and End).
+* **Trim Paths Animation Sync**: Check `Animate (f)` with custom duration in frames to automatically generate smooth, easy-eased path drawing with the head riding the animated tip.
+
+### 4. 🎨 Fade Animator Pro (7 Easing Curves)
 * **Mathematical Easing Curves**:
   1. `Linear` (Constant rate)
   2. `Ease In (Expo)` (Exponential acceleration)
@@ -52,17 +59,17 @@
 * **Flexible Application**: Independent `Fade In` and `Fade Out` toggles, with optional timeline **Layer Markers** (`fade in` / `fade out`).
 * **`[ 🚀 Apply Fade ]` & `[ ❌ Clear ]`**: 1-click batch application and expression cleanup across all selected layers.
 
-### 4. 🎯 9-Point Visual Anchor Point Alignment Pad
+### 5. 🎯 9-Point Visual Anchor Point Alignment Pad
 * **Directional Keypad**: Visual 3x3 pad (`◤ ▲ ◥ ◀ ● ▶ ◣ ▼ ◢`) to snap anchor points to Top-Left, Center, Bottom-Right, etc.
 * **Zero Visual Shift**: Compensates layer position in comp space so the layer does not jump when the anchor point moves.
 * **Center in Comp**: 1-click button to align layer centers directly to the composition viewport.
 
-### 5. ⊞ Grid Designer Dialog
+### 6. ⊞ Grid Designer Dialog
 * **Layout Presets**: 1-click presets for `2x2`, `3x3 Rule of Thirds`, `3 Columns Split`, and `12 Columns Web Layout`.
 * **Custom Dimensions**: Full control over Columns, Rows, Gutters (X/Y px), and Margins (X/Y px).
 * **Multiple Output Formats**: Generate solid **Shape Tiles (Fill)**, **Outline Strokes**, or **Guide Nulls**.
 
-### 6. 🎨 QuickSwatch (Live Color Palette)
+### 7. 🎨 QuickSwatch (Live Color Palette)
 * **Instant Fill & Stroke**: 1-click buttons under each swatch to apply colors directly to Shape fills, strokes, Text layers, or Solids.
 * **Native Color Picker**: Click any swatch tile to open the native OS color dialog (`$.colorPicker`) and update palette colors on the fly.
 * **Configurable Layout**: Customize total swatches (1–10) and grid columns (1–6).

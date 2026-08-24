@@ -622,6 +622,7 @@
                 var circ = grpContents.addProperty("ADBE Vector Shape - Ellipse");
                 try { (circ.property("ADBE Vector Ellipse Size") || circ.property(2)).expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];"; } catch(eC) {}
                 break;
+
             case "Rectangle":
                 var rect = grpContents.addProperty("ADBE Vector Shape - Rect");
                 try { (rect.property("ADBE Vector Rect Size") || rect.property(2)).expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];"; } catch(eR1) {}
@@ -629,23 +630,31 @@
                     try { (rect.property("ADBE Vector Rect Roundness") || rect.property(3)).setValue(8); } catch(eR2) {}
                 }
                 break;
+
             case "Star":
                 var star = grpContents.addProperty("ADBE Vector Shape - Star");
+                // 1. Type: 2 = Star
                 try { (star.property("ADBE Vector Star Type") || star.property(1)).setValue(2); } catch(eS1) {}
+                // 2. Points: 5
                 try { (star.property("ADBE Vector Star Points") || star.property(2)).setValue(5); } catch(eS2) {}
-                try { (star.property("ADBE Vector Star Outer Radius") || star.property(4)).expression = "effect(\"Head Size\")(\"Slider\") / 2;"; } catch(eS3) {}
-                try { (star.property("ADBE Vector Star Inner Radius") || star.property(6)).expression = "effect(\"Head Size\")(\"Slider\") / 4;"; } catch(eS4) {}
-                try { (star.property("ADBE Vector Star Rotation") || star.property(3)).setValue(90); } catch(eS5) {}
+                // 3. Rotation: 90
+                try { (star.property("ADBE Vector Star Rotation") || star.property(4)).setValue(90); } catch(eS3) {}
+                // 4. Inner Radius: Property 5
+                try { (star.property("ADBE Vector Star Inner Radius") || star.property(5)).expression = "effect(\"Head Size\")(\"Slider\") * 0.22;"; } catch(eS4) {}
+                // 5. Outer Radius: Property 7
+                try { (star.property("ADBE Vector Star Outer Radius") || star.property(7)).expression = "effect(\"Head Size\")(\"Slider\") * 0.5;"; } catch(eS5) {}
                 if (roundCorners) {
                     try {
-                        (star.property("ADBE Vector Star Outer Roundness") || star.property(5)).setValue(15);
-                        (star.property("ADBE Vector Star Inner Roundness") || star.property(7)).setValue(15);
+                        (star.property("ADBE Vector Star Inner Roundness") || star.property(6)).setValue(10);
+                        (star.property("ADBE Vector Star Outer Roundness") || star.property(8)).setValue(10);
                     } catch(eS6) {}
                 }
                 break;
+
             case "Triangle":
             default:
                 var poly = grpContents.addProperty("ADBE Vector Shape - Star");
+                // 1. Type: 1 = Polygon
                 try { (poly.property("ADBE Vector Star Type") || poly.property(1)).setValue(1); } catch(eP1) {}
                 var numPts = 3;
                 if (headTypeStr === "Pentagon") numPts = 5;
@@ -653,11 +662,14 @@
                 else if (headTypeStr === "Heptagon") numPts = 7;
                 else if (headTypeStr === "Octagon") numPts = 8;
 
+                // 2. Points
                 try { (poly.property("ADBE Vector Star Points") || poly.property(2)).setValue(numPts); } catch(eP2) {}
-                try { (poly.property("ADBE Vector Star Outer Radius") || poly.property(4)).expression = "effect(\"Head Size\")(\"Slider\") / 2;"; } catch(eP3) {}
-                try { (poly.property("ADBE Vector Star Rotation") || poly.property(3)).setValue(90); } catch(eP4) {}
+                // 3. Rotation
+                try { (poly.property("ADBE Vector Star Rotation") || poly.property(4)).setValue(90); } catch(eP3) {}
+                // 4. Outer Radius (Property 5 for Polygons)
+                try { (poly.property("ADBE Vector Star Outer Radius") || poly.property(5)).expression = "effect(\"Head Size\")(\"Slider\") * 0.5;"; } catch(eP4) {}
                 if (roundCorners) {
-                    try { (poly.property("ADBE Vector Star Outer Roundness") || poly.property(5)).setValue(15); } catch(eP5) {}
+                    try { (poly.property("ADBE Vector Star Outer Roundness") || poly.property(6)).setValue(15); } catch(eP5) {}
                 }
                 break;
         }

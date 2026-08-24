@@ -598,6 +598,8 @@
     }
 
     function createHeadShape(comp, lineLayer, headTypeStr, roundCorners, isStartHead, reverseDir) {
+        if (!lineLayer) return null;
+
         var headLayer = comp.layers.addShape();
         headLayer.name = lineLayer.name + (isStartHead ? " - Head Start" : " - Head");
         headLayer.moveBefore(lineLayer);
@@ -618,115 +620,170 @@
         switch (headTypeStr) {
             case "Circle":
                 var circ = grpContents.addProperty("ADBE Vector Shape - Ellipse");
-                circ.property("ADBE Vector Ellipse Size").expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];";
+                try { (circ.property("ADBE Vector Ellipse Size") || circ.property(2)).expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];"; } catch(eC) {}
                 break;
             case "Rectangle":
                 var rect = grpContents.addProperty("ADBE Vector Shape - Rect");
-                rect.property("ADBE Vector Rect Size").expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];";
-                if (roundCorners) rect.property("ADBE Vector Rect Roundness").setValue(8);
+                try { (rect.property("ADBE Vector Rect Size") || rect.property(2)).expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];"; } catch(eR1) {}
+                if (roundCorners) {
+                    try { (rect.property("ADBE Vector Rect Roundness") || rect.property(3)).setValue(8); } catch(eR2) {}
+                }
                 break;
             case "Star":
                 var star = grpContents.addProperty("ADBE Vector Shape - Star");
-                star.property("ADBE Vector Star Type").setValue(2); // Star
-                star.property("ADBE Vector Star Points").setValue(5);
-                star.property("ADBE Vector Star Outer Radius").expression = "effect(\"Head Size\")(\"Slider\") / 2;";
-                star.property("ADBE Vector Star Inner Radius").expression = "effect(\"Head Size\")(\"Slider\") / 4;";
-                star.property("ADBE Vector Star Rotation").setValue(90);
+                try { (star.property("ADBE Vector Star Type") || star.property(1)).setValue(2); } catch(eS1) {}
+                try { (star.property("ADBE Vector Star Points") || star.property(2)).setValue(5); } catch(eS2) {}
+                try { (star.property("ADBE Vector Star Outer Radius") || star.property(4)).expression = "effect(\"Head Size\")(\"Slider\") / 2;"; } catch(eS3) {}
+                try { (star.property("ADBE Vector Star Inner Radius") || star.property(6)).expression = "effect(\"Head Size\")(\"Slider\") / 4;"; } catch(eS4) {}
+                try { (star.property("ADBE Vector Star Rotation") || star.property(3)).setValue(90); } catch(eS5) {}
                 if (roundCorners) {
-                    star.property("ADBE Vector Star Outer Roundness").setValue(15);
-                    star.property("ADBE Vector Star Inner Roundness").setValue(15);
+                    try {
+                        (star.property("ADBE Vector Star Outer Roundness") || star.property(5)).setValue(15);
+                        (star.property("ADBE Vector Star Inner Roundness") || star.property(7)).setValue(15);
+                    } catch(eS6) {}
                 }
                 break;
             case "Triangle":
             default:
                 var poly = grpContents.addProperty("ADBE Vector Shape - Star");
-                poly.property("ADBE Vector Star Type").setValue(1); // Polygon
+                try { (poly.property("ADBE Vector Star Type") || poly.property(1)).setValue(1); } catch(eP1) {}
                 var numPts = 3;
                 if (headTypeStr === "Pentagon") numPts = 5;
                 else if (headTypeStr === "Hexagon") numPts = 6;
                 else if (headTypeStr === "Heptagon") numPts = 7;
                 else if (headTypeStr === "Octagon") numPts = 8;
 
-                poly.property("ADBE Vector Star Points").setValue(numPts);
-                poly.property("ADBE Vector Star Outer Radius").expression = "effect(\"Head Size\")(\"Slider\") / 2;";
-                poly.property("ADBE Vector Star Rotation").setValue(90);
-                if (roundCorners) poly.property("ADBE Vector Star Outer Roundness").setValue(15);
+                try { (poly.property("ADBE Vector Star Points") || poly.property(2)).setValue(numPts); } catch(eP2) {}
+                try { (poly.property("ADBE Vector Star Outer Radius") || poly.property(4)).expression = "effect(\"Head Size\")(\"Slider\") / 2;"; } catch(eP3) {}
+                try { (poly.property("ADBE Vector Star Rotation") || poly.property(3)).setValue(90); } catch(eP4) {}
+                if (roundCorners) {
+                    try { (poly.property("ADBE Vector Star Outer Roundness") || poly.property(5)).setValue(15); } catch(eP5) {}
+                }
                 break;
         }
 
         // Fill with Line Color
         var fill = grpContents.addProperty("ADBE Vector Graphic - Fill");
-        fill.property("ADBE Vector Fill Color").setValue(lineInfo.color);
+        try { (fill.property("ADBE Vector Fill Color") || fill.property(4)).setValue(lineInfo.color); } catch(eF) {}
 
-        // Path Tracking Expressions
-        var trimName = "Trim Paths 1";
-        
-        // Position Expression
-        if (!isStartHead) {
-            headLayer.property("Position").expression =
-                "var line = thisLayer.parent;\n" +
-                "if (line != null) {\n" +
-                "    try {\n" +
-                "        var pct = 1.0;\n" +
-                "        try {\n" +
-                "            var trim = line.content(\"" + trimName + "\");\n" +
-                "            if (trim) { pct = trim.end / 100; }\n" +
-                "        } catch(eT) {}\n" +
-                "        var p = Math.max(0.0001, Math.min(0.9999, pct));\n" +
-                "        line.content(1).content(1).path.pointOnPath(p, time);\n" +
-                "    } catch(e) { value; }\n" +
-                "} else { value; }";
-
-            headLayer.property("Rotation").expression =
-                "var line = thisLayer.parent;\n" +
-                "if (line != null) {\n" +
-                "    try {\n" +
-                "        var pct = 1.0;\n" +
-                "        try {\n" +
-                "            var trim = line.content(\"" + trimName + "\");\n" +
-                "            if (trim) { pct = trim.end / 100; }\n" +
-                "        } catch(eT) {}\n" +
-                "        var p = Math.max(0.0001, Math.min(0.9999, pct));\n" +
-                "        var tan = line.content(1).content(1).path.tangentOnPath(p, time);\n" +
-                "        var angle = radiansToDegrees(Math.atan2(tan[1], tan[0]));\n" +
-                "        var offset = 0;\n" +
-                "        try { offset = effect(\"Offset Angle\")(\"Slider\"); } catch(eO) {}\n" +
-                (reverseDir ? "        angle + 180 + offset;\n" : "        angle + offset;\n") +
-                "    } catch(e) { value; }\n" +
-                "} else { value; }";
-        } else {
-            // Start Head (Points at start of path, rotated 180)
-            headLayer.property("Position").expression =
-                "var line = thisLayer.parent;\n" +
-                "if (line != null) {\n" +
-                "    try {\n" +
-                "        line.content(1).content(1).path.pointOnPath(0.0001, time);\n" +
-                "    } catch(e) { value; }\n" +
-                "} else { value; }";
-
-            headLayer.property("Rotation").expression =
-                "var line = thisLayer.parent;\n" +
-                "if (line != null) {\n" +
-                "    try {\n" +
-                "        var tan = line.content(1).content(1).path.tangentOnPath(0.0001, time);\n" +
-                "        var angle = radiansToDegrees(Math.atan2(tan[1], tan[0]));\n" +
-                "        var offset = 0;\n" +
-                "        try { offset = effect(\"Offset Angle\")(\"Slider\"); } catch(eO) {}\n" +
-                (reverseDir ? "        angle + offset;\n" : "        angle + 180 + offset;\n") +
-                "    } catch(e) { value; }\n" +
-                "} else { value; }";
-        }
-
-        // Opacity sync
-        headLayer.property("Opacity").expression =
+        // Safe dynamic path tracker in expressions
+        var posExprEnd =
             "var line = thisLayer.parent;\n" +
             "if (line != null) {\n" +
-            "    var op = line.transform.opacity;\n" +
             "    try {\n" +
-            "        var trim = line.content(\"" + trimName + "\");\n" +
-            "        if (trim && trim.end <= 0) { 0; } else { op; }\n" +
-            "    } catch(e) { op; }\n" +
+            "        var targetPath = null;\n" +
+            "        for (var i = 1; i <= line.content.numProperties; i++) {\n" +
+            "            var g = line.content(i);\n" +
+            "            if (g.content && g.content.numProperties > 0) {\n" +
+            "                for (var j = 1; j <= g.content.numProperties; j++) {\n" +
+            "                    if (g.content(j).path) { targetPath = g.content(j).path; break; }\n" +
+            "                }\n" +
+            "            }\n" +
+            "            if (targetPath != null) break;\n" +
+            "        }\n" +
+            "        if (targetPath == null) targetPath = line.content(1).content(1).path;\n" +
+            "        var pct = 1.0;\n" +
+            "        try {\n" +
+            "            var trim = line.content(\"Trim Paths 1\");\n" +
+            "            if (trim) { pct = trim.end / 100; }\n" +
+            "        } catch(eT) {}\n" +
+            "        var p = Math.max(0.0001, Math.min(0.9999, pct));\n" +
+            "        targetPath.pointOnPath(p, time);\n" +
+            "    } catch(e) { value; }\n" +
             "} else { value; }";
+
+        var rotExprEnd =
+            "var line = thisLayer.parent;\n" +
+            "if (line != null) {\n" +
+            "    try {\n" +
+            "        var targetPath = null;\n" +
+            "        for (var i = 1; i <= line.content.numProperties; i++) {\n" +
+            "            var g = line.content(i);\n" +
+            "            if (g.content && g.content.numProperties > 0) {\n" +
+            "                for (var j = 1; j <= g.content.numProperties; j++) {\n" +
+            "                    if (g.content(j).path) { targetPath = g.content(j).path; break; }\n" +
+            "                }\n" +
+            "            }\n" +
+            "            if (targetPath != null) break;\n" +
+            "        }\n" +
+            "        if (targetPath == null) targetPath = line.content(1).content(1).path;\n" +
+            "        var pct = 1.0;\n" +
+            "        try {\n" +
+            "            var trim = line.content(\"Trim Paths 1\");\n" +
+            "            if (trim) { pct = trim.end / 100; }\n" +
+            "        } catch(eT) {}\n" +
+            "        var p = Math.max(0.0001, Math.min(0.9999, pct));\n" +
+            "        var tan = targetPath.tangentOnPath(p, time);\n" +
+            "        var angle = radiansToDegrees(Math.atan2(tan[1], tan[0]));\n" +
+            "        var offset = 0;\n" +
+            "        try { offset = effect(\"Offset Angle\")(\"Slider\"); } catch(eO) {}\n" +
+            (reverseDir ? "        angle + 180 + offset;\n" : "        angle + offset;\n") +
+            "    } catch(e) { value; }\n" +
+            "} else { value; }";
+
+        var posExprStart =
+            "var line = thisLayer.parent;\n" +
+            "if (line != null) {\n" +
+            "    try {\n" +
+            "        var targetPath = null;\n" +
+            "        for (var i = 1; i <= line.content.numProperties; i++) {\n" +
+            "            var g = line.content(i);\n" +
+            "            if (g.content && g.content.numProperties > 0) {\n" +
+            "                for (var j = 1; j <= g.content.numProperties; j++) {\n" +
+            "                    if (g.content(j).path) { targetPath = g.content(j).path; break; }\n" +
+            "                }\n" +
+            "            }\n" +
+            "            if (targetPath != null) break;\n" +
+            "        }\n" +
+            "        if (targetPath == null) targetPath = line.content(1).content(1).path;\n" +
+            "        targetPath.pointOnPath(0.0001, time);\n" +
+            "    } catch(e) { value; }\n" +
+            "} else { value; }";
+
+        var rotExprStart =
+            "var line = thisLayer.parent;\n" +
+            "if (line != null) {\n" +
+            "    try {\n" +
+            "        var targetPath = null;\n" +
+            "        for (var i = 1; i <= line.content.numProperties; i++) {\n" +
+            "            var g = line.content(i);\n" +
+            "            if (g.content && g.content.numProperties > 0) {\n" +
+            "                for (var j = 1; j <= g.content.numProperties; j++) {\n" +
+            "                    if (g.content(j).path) { targetPath = g.content(j).path; break; }\n" +
+            "                }\n" +
+            "            }\n" +
+            "            if (targetPath != null) break;\n" +
+            "        }\n" +
+            "        if (targetPath == null) targetPath = line.content(1).content(1).path;\n" +
+            "        var tan = targetPath.tangentOnPath(0.0001, time);\n" +
+            "        var angle = radiansToDegrees(Math.atan2(tan[1], tan[0]));\n" +
+            "        var offset = 0;\n" +
+            "        try { offset = effect(\"Offset Angle\")(\"Slider\"); } catch(eO) {}\n" +
+            (reverseDir ? "        angle + offset;\n" : "        angle + 180 + offset;\n") +
+            "    } catch(e) { value; }\n" +
+            "} else { value; }";
+
+        try {
+            var trGroup = headLayer.property("ADBE Transform Group");
+            if (!isStartHead) {
+                trGroup.property("ADBE Position").expression = posExprEnd;
+                trGroup.property("ADBE Rotation").expression = rotExprEnd;
+            } else {
+                trGroup.property("ADBE Position").expression = posExprStart;
+                trGroup.property("ADBE Rotation").expression = rotExprStart;
+            }
+
+            // Opacity sync
+            trGroup.property("ADBE Opacity").expression =
+                "var line = thisLayer.parent;\n" +
+                "if (line != null) {\n" +
+                "    var op = line.transform.opacity;\n" +
+                "    try {\n" +
+                "        var trim = line.content(\"Trim Paths 1\");\n" +
+                "        if (trim && trim.end <= 0) { 0; } else { op; }\n" +
+                "    } catch(e) { op; }\n" +
+                "} else { value; }";
+        } catch(eTr) {}
 
         return headLayer;
     }
@@ -757,28 +814,39 @@
                 if (doAnimate) {
                     var trim = rootVec.property("ADBE Vector Filter - Trim");
                     if (!trim) trim = rootVec.addProperty("ADBE Vector Filter - Trim");
-                    trim.name = "Trim Paths 1";
+                    if (trim) {
+                        trim.name = "Trim Paths 1";
 
-                    var fps = comp.frameRate;
-                    var durSec = Math.max(1, animFrames) / fps;
-                    var curT = comp.time;
+                        var fps = comp.frameRate;
+                        var durSec = Math.max(1, animFrames) / fps;
+                        var curT = comp.time;
 
-                    var endProp = trim.property("ADBE Vector Trim End");
-                    while (endProp.numKeys > 0) endProp.removeKey(1);
+                        var endProp = null;
+                        try {
+                            endProp = trim.property("ADBE Vector Trim End") ||
+                                      trim.property("ADBE Vector Trim-0002") ||
+                                      trim.property("End") ||
+                                      (trim.numProperties >= 2 ? trim.property(2) : null);
+                        } catch(eProp) {}
 
-                    if (!reverseDir) {
-                        endProp.setValueAtTime(curT, 0);
-                        endProp.setValueAtTime(curT + durSec, 100);
-                    } else {
-                        endProp.setValueAtTime(curT, 100);
-                        endProp.setValueAtTime(curT + durSec, 0);
-                    }
+                        if (endProp) {
+                            while (endProp.numKeys > 0) endProp.removeKey(1);
 
-                    if (endProp.numKeys >= 2) {
-                        var easeIn = new KeyframeEase(0, 75);
-                        var easeOut = new KeyframeEase(0, 75);
-                        endProp.setTemporalEaseAtKey(1, [easeIn], [easeOut]);
-                        endProp.setTemporalEaseAtKey(2, [easeIn], [easeOut]);
+                            if (!reverseDir) {
+                                endProp.setValueAtTime(curT, 0);
+                                endProp.setValueAtTime(curT + durSec, 100);
+                            } else {
+                                endProp.setValueAtTime(curT, 100);
+                                endProp.setValueAtTime(curT + durSec, 0);
+                            }
+
+                            if (endProp.numKeys >= 2) {
+                                var easeIn = new KeyframeEase(0, 75);
+                                var easeOut = new KeyframeEase(0, 75);
+                                endProp.setTemporalEaseAtKey(1, [easeIn], [easeOut]);
+                                endProp.setTemporalEaseAtKey(2, [easeIn], [easeOut]);
+                            }
+                        }
                     }
                 }
 

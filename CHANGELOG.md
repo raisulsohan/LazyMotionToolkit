@@ -36,6 +36,10 @@ Checked inside After Effects 2026 (26.5): `tools/ae-smoke-test.jsx`, `tools/ae-u
 - Remove also deletes the rendered file. A file After Effects still holds open is queued and deleted on the next render or panel launch, rather than purging the user's RAM previews.
 - Preview footage goes to the *Lazy Preview Files* bin (an existing *Quick Preview Files* bin is reused); red label.
 
+### Install
+- The release zip has one-click installers and uninstallers for Windows (`.bat`, asks for administrator rights once) and macOS (`.command`). They put the panel into the ScriptUI Panels folder of every After Effects found, and update a copy in the user's own After Effects folder. Old QuickStrike FX / QuickPreviewRender files and other LazyMotion copies are pointed out, not deleted.
+- `tools/package-release.mjs` builds the zip.
+
 ## 1.5.0
 
 Checked inside After Effects 2026 (26.5) with `tools/ae-smoke-test.jsx`, and offline with `tools/test-toolkit.js`.

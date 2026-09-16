@@ -1,0 +1,114 @@
+============================================================
+  LAZYMOTIONTOOLKIT
+  One dockable After Effects panel for everyday motion work
+============================================================
+
+WHAT YOU NEED
+  - Windows 10 / 11, or macOS
+  - Adobe After Effects CC 2020 or newer
+    (LazyPreview Render needs After Effects 2023 or newer)
+
+
+------------------------------------------------------------
+INSTALL
+------------------------------------------------------------
+  1. Unzip this download anywhere. The Desktop is fine.
+  2. Windows: double-click  "Install LazyMotionToolkit.bat"
+              and click Yes when Windows asks for administrator
+              rights.
+     macOS:   double-click  "Install LazyMotionToolkit (macOS).command"
+              (if macOS refuses, right-click it and choose Open)
+              and type your Mac login password if it asks.
+  3. Wait for "Installed", then press a key.
+  4. Restart After Effects and open:
+       Window > LazyMotionToolkit.jsx
+     Drag the panel's tab into your workspace to dock it.
+
+  The installer puts LazyMotionToolkit.jsx into the
+  "ScriptUI Panels" folder of every After Effects it finds.
+  Updating from an older version? Just run it again.
+
+  LazyPreview Render also needs one After Effects setting:
+    Windows: Edit > Preferences > Scripting & Expressions
+    macOS:   After Effects > Settings > Scripting & Expressions
+  Turn on "Allow Scripts to Write Files and Access Network".
+
+
+------------------------------------------------------------
+INSTALL BY HAND
+------------------------------------------------------------
+  Copy LazyMotionToolkit.jsx into this folder, then restart
+  After Effects:
+    Windows: C:\Program Files\Adobe\Adobe After Effects <version>\
+             Support Files\Scripts\ScriptUI Panels
+    macOS:   /Applications/Adobe After Effects <version>/
+             Scripts/ScriptUI Panels
+
+  Or run it once without installing:
+    File > Scripts > Run Script File... > LazyMotionToolkit.jsx
+
+
+------------------------------------------------------------
+WHAT IS IN THE PANEL
+------------------------------------------------------------
+  Precomp            each layer on its own (1:1) or as a group,
+                     cropped to the mask, animation kept
+  Auto Box           a rounded box behind text that grows as
+                     the text is typed on
+  Grid Maker         shape tiles, outlines or guide nulls in a
+                     grid of rows, columns and gutters
+  Head to Line       an arrow head that rides a drawn line
+  Fade Animator Pro  fade in / out with 7 easings
+  Anchor Point       9-point anchor pad and Center in Comp,
+                     without the layer jumping
+  Quick Swatch       one-click fill and stroke colours
+  LazyStrike FX      lightning, flashes and sky flashes,
+                     by timing or to the beat of audio
+  LazyPreview Render renders the work area in the background
+                     and plays it back as a layer
+
+  Full guide: https://github.com/raisulsohan/LazyMotionToolkit#readme
+
+
+------------------------------------------------------------
+IF SOMETHING GOES WRONG
+------------------------------------------------------------
+  LazyMotionToolkit.jsx is not in the Window menu
+      Restart After Effects: it only looks for panels while it
+      starts. Check that the installer said "Installed".
+
+  "Access denied (is Preferences > Scripting & Expressions >
+  Allow Scripts To Write Files And Access Network enabled?)"
+      Turn that setting on - see INSTALL above.
+
+  LazyPreview Render: "Save your project first"
+      aerender renders the saved project file, so save once.
+
+  LazyPreview Render refuses a composition name (Windows)
+      aerender on Windows only accepts English letters, digits
+      and symbols there. Rename it, e.g. "Main_Preview".
+
+  The panel shows twice in the Window menu
+      An older copy with another file name is still in the
+      ScriptUI Panels folder. Delete the older one.
+
+
+------------------------------------------------------------
+UNINSTALL
+------------------------------------------------------------
+  Windows: double-click  "Uninstall LazyMotionToolkit.bat"
+  macOS:   double-click  "Uninstall LazyMotionToolkit (macOS).command"
+  Your projects and rendered previews are not touched.
+
+
+------------------------------------------------------------
+SUPPORT
+------------------------------------------------------------
+  Raisul Sohan
+  lettertosohan@gmail.com
+  https://raisulsohan.com
+
+  LazyMotionToolkit is free and open source (MIT licence):
+  https://github.com/raisulsohan/LazyMotionToolkit
+
+  Feel free to share it with friends.

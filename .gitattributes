@@ -2,3 +2,8 @@
 * text=auto
 *.jsx text eol=crlf
 *.md text eol=lf
+
+# Installers break with the wrong line endings, whatever core.autocrlf says.
+*.bat text eol=crlf
+*.command text eol=lf
+*.sh text eol=lf

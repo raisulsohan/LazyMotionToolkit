@@ -163,7 +163,20 @@ Like Premiere Pro's *Render In to Out*.
 
 ## 💻 Installation
 
-### Method 1: Dockable ScriptUI Panel (Recommended)
+### Method 1: Installer (Recommended)
+
+1. Download **`LazyMotionToolkit-v1.6.zip`** from the [latest release](https://github.com/raisulsohan/LazyMotionToolkit/releases/latest) and unzip it.
+2. **Windows:** double-click `Install LazyMotionToolkit.bat` and click **Yes** when Windows asks for administrator rights.  
+   **macOS:** double-click `Install LazyMotionToolkit (macOS).command` (if macOS refuses, right-click → Open) and type your Mac password if asked.
+3. Restart After Effects and open **Window > LazyMotionToolkit.jsx**.
+
+The installer copies the panel into the `ScriptUI Panels` folder of every After Effects it finds. Run it again to update. The zip also has an uninstaller.
+
+> **LazyPreview Render** also needs *Allow Scripts to Write Files and Access Network*: **Edit > Preferences > Scripting & Expressions** (Windows) or **After Effects > Settings > Scripting & Expressions** (macOS).
+
+---
+
+### Method 2: Dockable ScriptUI Panel, by hand
 
 1. Copy [`LazyMotionToolkit.jsx`](LazyMotionToolkit.jsx) to your After Effects `ScriptUI Panels` directory:
 
@@ -188,7 +201,7 @@ Like Premiere Pro's *Render In to Out*.
 
 ---
 
-### Method 2: Direct Execution (Without Installation)
+### Method 3: Direct Execution (Without Installation)
 
 1. In After Effects, go to **File > Scripts > Run Script File...**
 2. Browse and select `LazyMotionToolkit.jsx`.
@@ -211,12 +224,14 @@ The panel is a single file, `LazyMotionToolkit.jsx`. The `tools/` folder is only
 | Command (Windows) | What it checks |
 | :--- | :--- |
 | `cscript //Nologo tools\check-extendscript.js` | The script compiles as ES3 and avoids names and comments that real ExtendScript rejects. |
-| `cscript //Nologo tools\test-toolkit.js` | The engine against a mocked After Effects: precompose choices and cropping (including After Effects' own re-centring on comp resize), mask bounds, fade expressions evaluated frame by frame, anchor maths, colours, grid limits. |
+| `cscript //Nologo tools\test-toolkit.js` | The engine against a mocked After Effects: precompose choices and cropping (including After Effects' own re-centring on comp resize), mask bounds, fade expressions evaluated frame by frame, anchor maths, colours, grid limits, lightning schedules and audio peaks, the aerender job (encoded command lines, non-English paths) and preview file clean-up. |
 | `"C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\AfterFX.com" -noui -r tools\ae-smoke-test.jsx` | The same behaviour **inside the real After Effects**: pixel placement measured with After Effects' own expression engine, fades, colours, LazyStrike layers, and a real aerender preview render (from a folder with Bengali letters) including Cancel. It writes `%TEMP%\lazymotion-smoke-results.txt` and quits without saving. Close After Effects first; needs *Allow Scripts to Write Files*. |
 | `… AfterFX.com -r tools\ae-ui-test-audio.jsx` | LazyStrike's Audio-Driven mode, which needs After Effects' UI (no `-noui`): a generated WAV with two bursts must give two flashes, with the helper layer removed and the work area restored. Results in `%TEMP%\lazystrike-audio-results.txt`. |
 | `… AfterFX.com -r tools\ae-ui-test-panel.jsx` | Builds the real panel and the LazyStrike FX window. Results in `%TEMP%\lazymotion-panel-results.txt`. |
 
 When `$.global.LazyMotionToolkitTest` is set before loading, the script hands back its engine functions instead of building the panel; the tests use this. It is never set in normal use.
+
+**Release zip:** `node tools/package-release.mjs` puts `LazyMotionToolkit-v<version>.zip` (the script, the installers from `tools/installer/`, and the licence) into the `00 Install from here` folder next to the repository. It stops if the README or CHANGELOG describe another version.
 
 ---
 

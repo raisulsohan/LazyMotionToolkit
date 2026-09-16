@@ -7,7 +7,7 @@
                Includes Smart Precomp (1:1 & Group), Auto Text Box,
                Fade Tools Pro (7 Easing Curves), Head to Line (Animated Arrows),
                Grid Designer, 9-Point Anchor Aligner, and Live Color Swatches.
-  Copyright (c) 2026 Raisul Sohan. All rights reserved.
+  Copyright (c) 2026 Raisul Sohan. Free and open source under the MIT License.
 ========================================================================
 */
 
@@ -17,7 +17,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.4.0";
+    var _buildVersion     = "1.5.0";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -44,15 +44,41 @@
     var strokeColors = ["#1D3557", "#457B9D", "#A8DADC", "#F1FAEE", "#E63946"];
     var savedColIndex = 4; // default 5 cols
 
-    if (app.settings.haveSetting(_settingsSection, "FillColors")) {
-        fillColors = app.settings.getSetting(_settingsSection, "FillColors").split(",");
+    function isHexColor(s) { return typeof s === "string" && /^#[0-9A-Fa-f]{6}$/.test(s); }
+
+    /**
+     * A saved palette can be hand-edited or cut short: keep 1-10 swatches, the
+     * same number of fills and strokes, and only valid #RRGGBB colours, so a bad
+     * entry can never stop the panel from drawing.
+     */
+    function normalizePalette(fills, strokes) {
+        var n = Math.max(1, Math.min(10, Math.max(fills.length, strokes.length)));
+        var f = [];
+        var s = [];
+        for (var i = 0; i < n; i++) {
+            f.push(isHexColor(fills[i]) ? fills[i].toUpperCase() : "#CCCCCC");
+            s.push(isHexColor(strokes[i]) ? strokes[i].toUpperCase() : "#888888");
+        }
+        return { fills: f, strokes: s };
     }
-    if (app.settings.haveSetting(_settingsSection, "StrokeColors")) {
-        strokeColors = app.settings.getSetting(_settingsSection, "StrokeColors").split(",");
-    }
-    if (app.settings.haveSetting(_settingsSection, "ColIndex")) {
-        savedColIndex = parseInt(app.settings.getSetting(_settingsSection, "ColIndex"));
-    }
+
+    try {
+        if (app.settings.haveSetting(_settingsSection, "FillColors")) {
+            fillColors = app.settings.getSetting(_settingsSection, "FillColors").split(",");
+        }
+        if (app.settings.haveSetting(_settingsSection, "StrokeColors")) {
+            strokeColors = app.settings.getSetting(_settingsSection, "StrokeColors").split(",");
+        }
+        if (app.settings.haveSetting(_settingsSection, "ColIndex")) {
+            var savedCols = parseInt(app.settings.getSetting(_settingsSection, "ColIndex"), 10);
+            savedColIndex = (savedCols >= 0 && savedCols <= 5) ? savedCols : 4;
+        }
+    } catch (eSettings) {}
+    (function () {
+        var palette = normalizePalette(fillColors, strokeColors);
+        fillColors = palette.fills;
+        strokeColors = palette.strokes;
+    })();
 
     function saveSwatchSettings() {
         app.settings.saveSetting(_settingsSection, "FillColors", fillColors.join(","));
@@ -60,18 +86,40 @@
         app.settings.saveSetting(_settingsSection, "ColIndex", savedColIndex.toString());
     }
 
-    function changeShapeColorRecursive(propGroup, colorValue, targetType) {
+    /** Set a value, or add a keyframe at `time` when the property is already animated. */
+    function setValueSmart(prop, value, time) {
+        if (prop.numKeys > 0) {
+            prop.setValueAtTime(time, value);
+        } else {
+            prop.setValue(value);
+        }
+    }
+
+    /** Returns how many Fill/Stroke colours were changed. */
+    function changeShapeColorRecursive(propGroup, colorValue, targetType, time) {
+        var changed = 0;
         for (var i = 1; i <= propGroup.numProperties; i++) {
             var prop = propGroup.property(i);
             if (prop.propertyType === PropertyType.PROPERTY) continue;
 
             if (targetType === "Fill" && prop.matchName === "ADBE Vector Graphic - Fill") {
-                prop.property("ADBE Vector Fill Color").setValue(colorValue);
+                setValueSmart(prop.property("ADBE Vector Fill Color"), colorValue, time);
+                changed++;
             } else if (targetType === "Stroke" && prop.matchName === "ADBE Vector Graphic - Stroke") {
-                prop.property("ADBE Vector Stroke Color").setValue(colorValue);
+                setValueSmart(prop.property("ADBE Vector Stroke Color"), colorValue, time);
+                changed++;
             } else if (prop.propertyType === PropertyType.INDEXED_GROUP || prop.propertyType === PropertyType.NAMED_GROUP) {
-                changeShapeColorRecursive(prop, colorValue, targetType);
+                changed += changeShapeColorRecursive(prop, colorValue, targetType, time);
             }
+        }
+        return changed;
+    }
+
+    function isSolidLayer(layer) {
+        try {
+            return !!(layer.source && layer.source.mainSource && layer.source.mainSource instanceof SolidSource && !layer.nullLayer);
+        } catch (e) {
+            return false;
         }
     }
 
@@ -86,62 +134,254 @@
             alert("Please select at least one layer to apply color.");
             return;
         }
+        var skipped = colorLayers(comp, layers, colorHex, targetType);
+        if (skipped.length) {
+            alert(targetType + " color was not applied to:\n" + skipped.join("\n"));
+        }
+    }
 
+    /** Engine: colour `layers` in `comp`. Returns what it could not colour, with the reason. */
+    function colorLayers(comp, layers, colorHex, targetType) {
         var colorValue = hexToAeColor(colorHex);
+        var rgb = [colorValue[0], colorValue[1], colorValue[2]];
+        var skipped = [];
         app.beginUndoGroup("LazyMotion: Apply " + targetType + " Color");
         try {
             for (var i = 0; i < layers.length; i++) {
                 var layer = layers[i];
-                if (layer instanceof ShapeLayer) {
-                    changeShapeColorRecursive(layer.property("ADBE Root Vectors Group"), colorValue, targetType);
-                } else if (layer instanceof TextLayer && targetType === "Fill") {
-                    var sourceText = layer.property("Source Text");
-                    if (sourceText) {
+                // One layer that fails must not stop the others.
+                try {
+                    if (layer instanceof ShapeLayer) {
+                        if (changeShapeColorRecursive(layer.property("ADBE Root Vectors Group"), colorValue, targetType, comp.time) === 0) {
+                            skipped.push(layer.name + " (no " + targetType.toLowerCase() + " in its contents)");
+                        }
+                    } else if (layer instanceof TextLayer) {
+                        var sourceText = layer.property("ADBE Text Properties").property("ADBE Text Document");
                         var textDoc = sourceText.value;
-                        textDoc.fillColor = [colorValue[0], colorValue[1], colorValue[2]];
-                        sourceText.setValue(textDoc);
+                        if (targetType === "Fill") {
+                            textDoc.applyFill = true;
+                            textDoc.fillColor = rgb;
+                        } else {
+                            textDoc.applyStroke = true;
+                            textDoc.strokeColor = rgb;
+                            if (!(textDoc.strokeWidth > 0)) textDoc.strokeWidth = 2;
+                        }
+                        setValueSmart(sourceText, textDoc, comp.time);
+                    } else if (isSolidLayer(layer) && targetType === "Fill") {
+                        // A Fill effect per layer: changing the solid itself would
+                        // recolour every other layer that uses the same solid.
+                        var effects = layer.property("ADBE Effect Parade");
+                        var fillEffect = effects.property("ADBE Fill");
+                        if (!fillEffect) fillEffect = effects.addProperty("ADBE Fill");
+                        setValueSmart(fillEffect.property("ADBE Fill-0002"), colorValue, comp.time);
+                    } else {
+                        skipped.push(layer.name + (isSolidLayer(layer) ? " (solids take Fill only)" : " (not a shape, text or solid layer)"));
                     }
-                } else if (layer instanceof SolidSource || (layer.source && layer.source instanceof SolidSource)) {
-                    if (targetType === "Fill") {
-                        var fillEffect = layer.property("ADBE Effect Parade").property("ADBE Fill");
-                        if (!fillEffect) fillEffect = layer.property("ADBE Effect Parade").addProperty("ADBE Fill");
-                        fillEffect.property("ADBE Fill-0002").setValue(colorValue);
-                    }
+                } catch (eLayer) {
+                    skipped.push(layer.name + " (" + eLayer.toString() + ")");
                 }
             }
-        } catch (e) {
-            alert("Color Apply Error: " + e.toString());
         } finally {
             app.endUndoGroup();
         }
+        return skipped;
     }
 
     // ============================================================
     // 3. Smart Precomp Engines (Individual & Group Combined)
     // ============================================================
+    /** Every value a property takes: its keyframes, or its one static value. */
+    function allValues(prop) {
+        var values = [];
+        if (prop.numKeys > 0) {
+            for (var k = 1; k <= prop.numKeys; k++) values.push(prop.keyValue(k));
+        } else {
+            values.push(prop.value);
+        }
+        return values;
+    }
+
+    /**
+     * The area a layer's masks can ever show, in layer space, as
+     * { x, y, width, height } — or null when cropping to the masks is not safe:
+     * no additive mask, an inverted mask (it shows everything outside its path),
+     * or a mask path driven by an expression. Covers every keyframe of the path,
+     * feather and expansion, and the Bezier handles (curves bulge past vertices).
+     * The result is clipped to the layer's own size.
+     */
     function getMaskBounds(layer) {
-        var masks = layer.property("Masks");
+        var masks = layer.property("ADBE Mask Parade");
         if (!masks || masks.numProperties === 0) return null;
-        var minX = 999999999, minY = 999999999, maxX = -999999999, maxY = -999999999;
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         var found = false;
 
         for (var i = 1; i <= masks.numProperties; i++) {
             var mask = masks.property(i);
-            if (!mask.enabled || mask.maskMode === MaskMode.NONE) continue;
-            try {
-                var shape = mask.property("maskShape").value;
-                var feather = mask.property("maskFeather").value;
-                var verts = shape.vertices;
+            var mode = mask.maskMode;
+            if (mode === MaskMode.NONE) continue;
+            if (mask.inverted) return null;
+            // Subtract, Intersect and Darken only ever take pixels away.
+            if (mode === MaskMode.SUBTRACT || mode === MaskMode.INTERSECT || mode === MaskMode.DARKEN) continue;
+
+            var shapeProp = mask.property("ADBE Mask Shape");
+            if (shapeProp.expressionEnabled && shapeProp.expression) return null;
+
+            var grow = 0;
+            var feathers = allValues(mask.property("ADBE Mask Feather"));
+            for (var f = 0; f < feathers.length; f++) grow = Math.max(grow, feathers[f][0], feathers[f][1]);
+            var expansions = allValues(mask.property("ADBE Mask Offset"));
+            var maxExpansion = 0;
+            for (var e = 0; e < expansions.length; e++) maxExpansion = Math.max(maxExpansion, expansions[e]);
+            grow += maxExpansion;
+
+            var shapes = allValues(shapeProp);
+            for (var s = 0; s < shapes.length; s++) {
+                var verts = shapes[s].vertices;
+                var ins = shapes[s].inTangents || [];
+                var outs = shapes[s].outTangents || [];
                 for (var v = 0; v < verts.length; v++) {
-                    minX = Math.min(minX, verts[v][0] - feather[0]);
-                    minY = Math.min(minY, verts[v][1] - feather[1]);
-                    maxX = Math.max(maxX, verts[v][0] + feather[0]);
-                    maxY = Math.max(maxY, verts[v][1] + feather[1]);
-                    found = true;
+                    var pts = [verts[v]];
+                    if (ins[v]) pts.push([verts[v][0] + ins[v][0], verts[v][1] + ins[v][1]]);
+                    if (outs[v]) pts.push([verts[v][0] + outs[v][0], verts[v][1] + outs[v][1]]);
+                    for (var p = 0; p < pts.length; p++) {
+                        minX = Math.min(minX, pts[p][0] - grow);
+                        minY = Math.min(minY, pts[p][1] - grow);
+                        maxX = Math.max(maxX, pts[p][0] + grow);
+                        maxY = Math.max(maxY, pts[p][1] + grow);
+                        found = true;
+                    }
                 }
-            } catch (err) {}
+            }
         }
-        return found ? { x: Math.floor(minX), y: Math.floor(minY), width: Math.ceil(maxX - minX), height: Math.ceil(maxY - minY) } : null;
+        if (!found) return null;
+
+        // Nothing outside the layer is visible anyway.
+        minX = Math.max(0, Math.floor(minX));
+        minY = Math.max(0, Math.floor(minY));
+        maxX = Math.min(layer.width, Math.ceil(maxX));
+        maxY = Math.min(layer.height, Math.ceil(maxY));
+        if (maxX - minX < 1 || maxY - minY < 1) return null;
+        if (minX === 0 && minY === 0 && maxX === layer.width && maxY === layer.height) return null;
+        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    }
+
+    /**
+     * Footage, solid and comp layers can be precomposed with their attributes
+     * left on the outside ("Leave all attributes"): transforms, keyframes,
+     * effects, masks, time remapping and parenting all stay exactly as they
+     * were. Shape and text layers have no source, so theirs must move inside.
+     */
+    function canLeaveAttributes(layer) {
+        return !!(layer.source) && !(layer instanceof ShapeLayer) && !(layer instanceof TextLayer);
+    }
+
+    function findLayerBySource(comp, source) {
+        for (var i = 1; i <= comp.numLayers; i++) {
+            var l = comp.layer(i);
+            try {
+                if (l.source && l.source.id === source.id) return l;
+            } catch (e) {}
+        }
+        return null;
+    }
+
+    function offsetPoint(value, dx, dy) {
+        var out = [];
+        for (var i = 0; i < value.length; i++) out.push(value[i]);
+        out[0] -= dx;
+        out[1] -= dy;
+        return out;
+    }
+
+    /** Move a point property (every keyframe, or its value) by -dx, -dy. */
+    function shiftPointProperty(prop, dx, dy) {
+        if (prop.numKeys > 0) {
+            for (var k = 1; k <= prop.numKeys; k++) prop.setValueAtKey(k, offsetPoint(prop.keyValue(k), dx, dy));
+        } else {
+            prop.setValue(offsetPoint(prop.value, dx, dy));
+        }
+    }
+
+    function shiftShape(shape, dx, dy) {
+        var verts = shape.vertices;
+        var moved = [];
+        for (var i = 0; i < verts.length; i++) moved.push([verts[i][0] - dx, verts[i][1] - dy]);
+        shape.vertices = moved; // tangents are relative to their vertex, so they stay
+        return shape;
+    }
+
+    /** A property's keyframe values (or its one value), read now to be written back later. */
+    function snapshotProperty(prop) {
+        var snap = { prop: prop, keys: [], value: null };
+        if (prop.numKeys > 0) {
+            for (var k = 1; k <= prop.numKeys; k++) snap.keys.push(prop.keyValue(k));
+        } else {
+            snap.value = prop.value;
+        }
+        return snap;
+    }
+
+    /** Write a snapshot back through `shift` (offsetPoint or shiftShape), moved by -dx, -dy. */
+    function restoreShifted(snap, dx, dy, shift) {
+        if (snap.keys.length) {
+            for (var k = 1; k <= snap.keys.length; k++) snap.prop.setValueAtKey(k, shift(snap.keys[k - 1], dx, dy));
+        } else {
+            snap.prop.setValue(shift(snap.value, dx, dy));
+        }
+    }
+
+    function snapshotMaskShapes(layer) {
+        var snaps = [];
+        var masks = layer.property("ADBE Mask Parade");
+        if (!masks) return snaps;
+        for (var i = 1; i <= masks.numProperties; i++) snaps.push(snapshotProperty(masks.property(i).property("ADBE Mask Shape")));
+        return snaps;
+    }
+
+    /** Effect point controls (2D) are in layer space, so they move with the crop too. */
+    function snapshotEffectPoints(group, snaps) {
+        if (!group) return snaps;
+        for (var i = 1; i <= group.numProperties; i++) {
+            var prop = group.property(i);
+            if (prop.propertyType === PropertyType.PROPERTY) {
+                if (prop.propertyValueType === PropertyValueType.TwoD_SPATIAL) snaps.push(snapshotProperty(prop));
+            } else {
+                snapshotEffectPoints(prop, snaps);
+            }
+        }
+        return snaps;
+    }
+
+    /**
+     * Shrink a "leave attributes" precomp to `crop` (layer space). The source
+     * moves up-left inside the precomp by the crop offset, and everything on
+     * the outer layer that is measured in layer space — anchor point, mask
+     * paths, effect points — moves by the same amount, so nothing shifts on
+     * screen at any frame.
+     *
+     * After Effects re-centres the layers of a comp whose size changes, and
+     * rescales effect points when a layer's source changes size. So every
+     * value is read before the resize and written back explicitly after it.
+     */
+    function cropPrecomp(preLayer, precomp, crop) {
+        var innerPos = snapshotProperty(precomp.layer(1).property("ADBE Transform Group").property("ADBE Position"));
+        var anchor = snapshotProperty(preLayer.property("ADBE Transform Group").property("ADBE Anchor Point"));
+        var maskShapes = snapshotMaskShapes(preLayer);
+        var effectPoints = snapshotEffectPoints(preLayer.property("ADBE Effect Parade"), []);
+
+        precomp.width = Math.max(4, crop.width);
+        precomp.height = Math.max(4, crop.height);
+
+        restoreShifted(innerPos, crop.x, crop.y, offsetPoint);
+        restoreShifted(anchor, crop.x, crop.y, offsetPoint);
+        for (var m = 0; m < maskShapes.length; m++) restoreShifted(maskShapes[m], crop.x, crop.y, shiftShape);
+        for (var e = 0; e < effectPoints.length; e++) restoreShifted(effectPoints[e], crop.x, crop.y, offsetPoint);
+    }
+
+    /** Cameras and lights. (Text and shape layers are not `instanceof AVLayer` in After Effects.) */
+    function isCameraOrLight(layer) {
+        return (typeof CameraLayer !== "undefined" && layer instanceof CameraLayer) ||
+               (typeof LightLayer !== "undefined" && layer instanceof LightLayer);
     }
 
     function executeIndividualPrecomp() {
@@ -150,71 +390,58 @@
             alert("Please select at least one layer to precompose.");
             return;
         }
+        var skipped = precomposeEach(comp, comp.selectedLayers);
+        if (skipped.length) alert("Not precomposed:\n" + skipped.join("\n"));
+    }
 
+    /** Engine: each layer into its own precomp. Returns what it skipped, with the reason. */
+    function precomposeEach(comp, layers) {
+        var skipped = [];
         app.beginUndoGroup("LazyMotion: Individual Precomp");
         try {
-            var layers = comp.selectedLayers;
-            var anchorTime = comp.time;
-
+            // Bottom-up: precomposing a layer never renumbers the ones above it.
             for (var i = layers.length - 1; i >= 0; i--) {
                 var layer = layers[i];
-                if (layer.threeDLayer) continue;
+                var name = layer.name;
+                try {
+                    if (isCameraOrLight(layer) || layer.nullLayer) {
+                        skipped.push(name + " (null, camera or light)");
+                        continue;
+                    }
 
-                var oldPos = layer.property("Position").value;
-                var oldScale = layer.property("Scale").value;
-                var oldRot = layer.property("Rotation").value;
-                var oldAnchor = layer.property("Anchor Point").value;
-                var oldIn = layer.inPoint;
-                var oldOut = layer.outPoint;
-                var oldStartTime = layer.startTime;
-
-                var srcW = layer.source ? layer.source.width : layer.width;
-                var srcH = layer.source ? layer.source.height : layer.height;
-                var maskBounds = getMaskBounds(layer);
-
-                var cropX = maskBounds ? maskBounds.x : 0;
-                var cropY = maskBounds ? maskBounds.y : 0;
-                var cropW = Math.max(4, maskBounds ? maskBounds.width : srcW);
-                var cropH = Math.max(4, maskBounds ? maskBounds.height : srcH);
-
-                var finalAnchorTime = (anchorTime >= oldOut) ? oldIn : anchorTime;
-                var precompDuration = Math.max(oldOut - finalAnchorTime, 1 / comp.frameRate);
-
-                var layerIndex = layer.index;
-                var precomp = comp.layers.precompose([layerIndex], layer.name + "_PC", true);
-                var preLayer = comp.layer(layerIndex);
-
-                precomp.duration = precompDuration;
-                precomp.width = cropW;
-                precomp.height = cropH;
-
-                var innerLayer = precomp.layer(1);
-
-                while (innerLayer.property("Scale").numKeys > 0) innerLayer.property("Scale").removeKey(1);
-                innerLayer.property("Scale").setValue([100, 100]);
-
-                while (innerLayer.property("Rotation").numKeys > 0) innerLayer.property("Rotation").removeKey(1);
-                innerLayer.property("Rotation").setValue(0);
-
-                while (innerLayer.property("Position").numKeys > 0) innerLayer.property("Position").removeKey(1);
-                innerLayer.property("Position").setValue([oldAnchor[0] - cropX, oldAnchor[1] - cropY]);
-
-                innerLayer.startTime = oldStartTime - finalAnchorTime;
-                innerLayer.inPoint = 0;
-
-                preLayer.property("Position").setValue(oldPos);
-                preLayer.property("Scale").setValue(oldScale);
-                preLayer.property("Rotation").setValue(oldRot);
-                preLayer.property("Anchor Point").setValue([oldAnchor[0] - cropX, oldAnchor[1] - cropY]);
-                preLayer.startTime = finalAnchorTime;
-                preLayer.inPoint = finalAnchorTime;
-                preLayer.outPoint = oldOut;
+                    if (canLeaveAttributes(layer)) {
+                        var crop = getMaskBounds(layer);
+                        var precomp = comp.layers.precompose([layer.index], name + "_PC", false);
+                        var preLayer = findLayerBySource(comp, precomp);
+                        if (crop && preLayer) cropPrecomp(preLayer, precomp, crop);
+                    } else {
+                        // Shape/text: attributes move inside a comp-sized precomp,
+                        // which keeps every keyframe and the layer's placement.
+                        if (layer.parent) {
+                            skipped.push(name + " (parented: its parent would not come into the precomp — unparent it first)");
+                            continue;
+                        }
+                        if (layer.threeDLayer) {
+                            skipped.push(name + " (3D shape/text layer — use Precomp (Group), which keeps the scene camera)");
+                            continue;
+                        }
+                        var oldIn = layer.inPoint;
+                        var oldOut = layer.outPoint;
+                        var movedComp = comp.layers.precompose([layer.index], name + "_PC", true);
+                        var movedLayer = findLayerBySource(comp, movedComp);
+                        if (movedLayer) {
+                            movedLayer.inPoint = oldIn;
+                            movedLayer.outPoint = oldOut;
+                        }
+                    }
+                } catch (eLayer) {
+                    skipped.push(name + " (" + eLayer.toString() + ")");
+                }
             }
-        } catch (err) {
-            alert("Individual Precomp Error:\n" + err.toString());
         } finally {
             app.endUndoGroup();
         }
+        return skipped;
     }
 
     function executeGroupPrecomp() {
@@ -229,33 +456,53 @@
             executeIndividualPrecomp();
             return;
         }
+        var problem = precomposeGroup(comp, layers);
+        if (problem) alert(problem);
+    }
+
+    /** Engine: all `layers` into one precomp. Returns "" or what stopped it. */
+    function precomposeGroup(comp, layers) {
+        var layerIndices = [];
+        var selectedIndex = {};
+        var minIn = Infinity;
+        var maxOut = -Infinity;
+        var any3D = false;
+        var topName = layers[0].name;
+        for (var i = 0; i < layers.length; i++) {
+            layerIndices.push(layers[i].index);
+            selectedIndex[layers[i].index] = true;
+            if (layers[i].inPoint < minIn) minIn = layers[i].inPoint;
+            if (layers[i].outPoint > maxOut) maxOut = layers[i].outPoint;
+            if (layers[i].threeDLayer) any3D = true;
+        }
+
+        // A child whose parent stays outside would jump once it is inside.
+        var orphans = [];
+        for (var j = 0; j < layers.length; j++) {
+            var parent = layers[j].parent;
+            if (parent && !selectedIndex[parent.index]) orphans.push(layers[j].name + " (parent: " + parent.name + ")");
+        }
+        if (orphans.length) {
+            return "These layers are parented to a layer that is not selected:\n" + orphans.join("\n") +
+                   "\n\nSelect the parent too, or unparent them, then precompose.";
+        }
 
         app.beginUndoGroup("LazyMotion: Group Precomp");
         try {
-            var layerIndices = [];
-            var minIn = 99999999;
-            var maxOut = -99999999;
-            var topName = layers[0].name;
-
-            for (var i = 0; i < layers.length; i++) {
-                layerIndices.push(layers[i].index);
-                if (layers[i].inPoint < minIn) minIn = layers[i].inPoint;
-                if (layers[i].outPoint > maxOut) maxOut = layers[i].outPoint;
-            }
-
-            var precompName = topName + "_Group_PC";
-            var precomp = comp.layers.precompose(layerIndices, precompName, true);
-            
-            var preLayer = comp.selectedLayers[0];
+            var precomp = comp.layers.precompose(layerIndices, topName + "_Group_PC", true);
+            var preLayer = findLayerBySource(comp, precomp);
             if (preLayer) {
                 preLayer.inPoint = minIn;
                 preLayer.outPoint = maxOut;
+                // 3D layers inside keep rendering with this comp's camera and lights.
+                if (any3D) preLayer.collapseTransformation = true;
             }
         } catch (err) {
-            alert("Group Precomp Error:\n" + err.toString());
+            return "Group Precomp Error:\n" + err.toString();
         } finally {
             app.endUndoGroup();
         }
+        return "";
     }
 
     // ============================================================
@@ -283,7 +530,11 @@
         }
 
         var selectedLayers = comp.selectedLayers;
-        if (selectedLayers.length === 0 || !(selectedLayers[0] instanceof TextLayer)) {
+        var anyText = false;
+        for (var s = 0; s < selectedLayers.length; s++) {
+            if (selectedLayers[s] instanceof TextLayer) anyText = true;
+        }
+        if (!anyText) {
             alert("Please select a Text Layer first, then click Auto Box.");
             return;
         }
@@ -486,14 +737,57 @@
     // 5. Fade Tools Pro (7 Easing Functions & Layer Markers)
     // ============================================================
     var easingFuncs = [
-        "ease = function(t){ return t; };",
-        "ease = function(t){ return (t==0)?0:Math.pow(2, 10*(t-1)); };",
-        "ease = function(t){ return Math.sin((t * Math.PI)/2); };",
-        "ease = function(t){ return t<0.5 ? 2*t*t : -1+(4-2*t)*t; };",
-        "ease = function(t){ return t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; };",
-        "ease = function(t){ var s=7.5625, p=2.75, l; if(t<1/p){l=s*t*t;} else if(t<2/p){t-=1.5/p;l=s*t*t+0.75;} else if(t<2.5/p){t-=2.25/p;l=s*t*t+0.9375;} else{t-=2.625/p;l=s*t*t+0.984375;} return l; };",
-        "ease = function(t){ var c4 = (2 * Math.PI) / 3; return t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4); };"
+        "function ease(t){ return t; }",
+        "function ease(t){ return (t==0)?0:Math.pow(2, 10*(t-1)); }",
+        "function ease(t){ return Math.sin((t * Math.PI)/2); }",
+        "function ease(t){ return t<0.5 ? 2*t*t : -1+(4-2*t)*t; }",
+        "function ease(t){ return t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; }",
+        "function ease(t){ var s=7.5625, p=2.75, l; if(t<1/p){l=s*t*t;} else if(t<2/p){t-=1.5/p;l=s*t*t+0.75;} else if(t<2.5/p){t-=2.25/p;l=s*t*t+0.9375;} else{t-=2.625/p;l=s*t*t+0.984375;} return l; }",
+        "function ease(t){ var c4 = (2 * Math.PI) / 3; return t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4); }"
     ];
+
+    // First line of every fade expression, so Clear and a re-apply know which
+    // expressions are LazyMotion's and leave anyone else's alone.
+    var FADE_TAG = "// LazyMotion Fade";
+
+    function isFadeExpression(expr) {
+        if (!expr) return false;
+        if (expr.indexOf(FADE_TAG) === 0) return true;
+        // Written by 1.4 and earlier, before the tag existed.
+        return expr.indexOf("ease = function(t)") === 0 && expr.indexOf("fadeDuration = ") !== -1;
+    }
+
+    /**
+     * The opacity expression. Speed divides the duration (2 = twice as fast).
+     * The layer's own opacity (value or keyframes) is kept and scaled, the
+     * first and last frames are fully transparent, and a layer shorter than
+     * two fades eases in and out without a jump in the middle.
+     */
+    function buildFadeExpression(easeType, durationFrames, speed, fadeIn, fadeOut) {
+        var frames = durationFrames / speed;
+        return FADE_TAG + "\n" +
+            easingFuncs[easeType] + "\n" +
+            "function clamp01(x){ return Math.max(0, Math.min(1, x)); }\n" +
+            "var d = framesToTime(" + frames + ");\n" +
+            "var k = 1;\n" +
+            (fadeIn ? "k = Math.min(k, ease(clamp01((time - inPoint) / d)));\n" : "") +
+            (fadeOut ? "k = Math.min(k, ease(clamp01((outPoint - thisComp.frameDuration - time) / d)));\n" : "") +
+            "value * clamp01(k);";
+    }
+
+    function removeFadeMarkers(layer) {
+        var markers = layer.property("ADBE Marker");
+        if (!markers) return;
+        for (var j = markers.numKeys; j >= 1; j--) {
+            var comment = markers.keyValue(j).comment;
+            if (comment === "fade in" || comment === "fade out") markers.removeKey(j);
+        }
+    }
+
+    function opacityOf(layer) {
+        var transform = layer.property("ADBE Transform Group");
+        return transform ? transform.property("ADBE Opacity") : null;
+    }
 
     function applyFadeTools(fadeDuration, fadeSpeed, easeType, applyFadeIn, applyFadeOut, addMarkers) {
         var comp = app.project.activeItem;
@@ -507,38 +801,44 @@
             alert("Please select at least one layer to apply fades.");
             return;
         }
+        var skipped = fadeLayers(selectedLayers, fadeDuration, fadeSpeed, easeType, applyFadeIn, applyFadeOut, addMarkers);
+        if (skipped.length) alert("Fade not applied to:\n" + skipped.join("\n"));
+    }
 
+    /** Engine: put the fade on `selectedLayers`. Returns what it skipped, with the reason. */
+    function fadeLayers(selectedLayers, fadeDuration, fadeSpeed, easeType, applyFadeIn, applyFadeOut, addMarkers) {
+        var expression = buildFadeExpression(easeType, fadeDuration, fadeSpeed, applyFadeIn, applyFadeOut);
+        var skipped = [];
         app.beginUndoGroup("LazyMotion: Apply Fade Tools");
         try {
             for (var i = 0; i < selectedLayers.length; i++) {
                 var layer = selectedLayers[i];
-                var opacityProp = layer.property("ADBE Transform Group").property("ADBE Opacity");
+                try {
+                    var opacityProp = opacityOf(layer);
+                    if (!opacityProp) {
+                        skipped.push(layer.name + " (no opacity)");
+                        continue;
+                    }
+                    if (opacityProp.expression && !isFadeExpression(opacityProp.expression)) {
+                        skipped.push(layer.name + " (already has its own opacity expression)");
+                        continue;
+                    }
+                    opacityProp.expression = expression;
 
-                var expression =
-                    easingFuncs[easeType] + "\n" +
-                    "fadeDuration = " + (fadeDuration * fadeSpeed) + ";\n" +
-                    "t = time;\n" +
-                    "d = framesToTime(fadeDuration);\n" +
-                    "fadeIn = ease((t - inPoint)/d)*100;\n" +
-                    "fadeOut = ease((outPoint - t)/d)*100;\n" +
-                    "if (t < inPoint + d) {\n" +
-                    (applyFadeIn ? "fadeIn;\n" : "100;\n") +
-                    "} else if (t > outPoint - d) {\n" +
-                    (applyFadeOut ? "fadeOut;\n" : "100;\n") +
-                    "} else { 100; }";
-
-                opacityProp.expression = expression;
-
-                if (addMarkers) {
-                    if (applyFadeIn) layer.property("Marker").setValueAtTime(layer.inPoint, new MarkerValue("fade in"));
-                    if (applyFadeOut) layer.property("Marker").setValueAtTime(layer.outPoint, new MarkerValue("fade out"));
+                    removeFadeMarkers(layer);
+                    if (addMarkers) {
+                        var markers = layer.property("ADBE Marker");
+                        if (applyFadeIn) markers.setValueAtTime(layer.inPoint, new MarkerValue("fade in"));
+                        if (applyFadeOut) markers.setValueAtTime(layer.outPoint, new MarkerValue("fade out"));
+                    }
+                } catch (eLayer) {
+                    skipped.push(layer.name + " (" + eLayer.toString() + ")");
                 }
             }
-        } catch (e) {
-            alert("Fade Apply Error: " + e.toString());
         } finally {
             app.endUndoGroup();
         }
+        return skipped;
     }
 
     function deleteFadeTools() {
@@ -553,22 +853,36 @@
             alert("Please select at least one layer.");
             return;
         }
+        var kept = clearFades(selectedLayers);
+        if (kept.length) alert("Left alone (their opacity expression is not a LazyMotion fade):\n" + kept.join("\n"));
+    }
 
+    /** Engine: remove LazyMotion fades from `selectedLayers`. Returns the layers it left alone. */
+    function clearFades(selectedLayers) {
+        var kept = [];
         app.beginUndoGroup("LazyMotion: Delete Fade Effects");
         try {
             for (var i = 0; i < selectedLayers.length; i++) {
                 var layer = selectedLayers[i];
-                var opacityProp = layer.property("ADBE Transform Group").property("ADBE Opacity");
-                opacityProp.expression = "";
-
-                var markers = layer.property("Marker");
-                for (var j = markers.numKeys; j >= 1; j--) {
-                    markers.removeKey(j);
+                try {
+                    var opacityProp = opacityOf(layer);
+                    if (opacityProp && opacityProp.expression) {
+                        if (isFadeExpression(opacityProp.expression)) {
+                            opacityProp.expression = "";
+                        } else {
+                            kept.push(layer.name);
+                        }
+                    }
+                    // Only the "fade in" / "fade out" markers; the user's own stay.
+                    removeFadeMarkers(layer);
+                } catch (eLayer) {
+                    kept.push(layer.name + " (" + eLayer.toString() + ")");
                 }
             }
         } finally {
             app.endUndoGroup();
         }
+        return kept;
     }
 
     // ============================================================
@@ -878,61 +1192,168 @@
     // ============================================================
     // 7. 9-Point Anchor Point Aligner
     // ============================================================
+    /** A layer-space offset as it appears in the parent's space: scaled, then rotated. */
+    function layerToParentDelta(dx, dy, scale, rotationDeg) {
+        var sx = dx * (scale[0] / 100);
+        var sy = dy * (scale[1] / 100);
+        var rad = rotationDeg * Math.PI / 180;
+        return [sx * Math.cos(rad) - sy * Math.sin(rad), sx * Math.sin(rad) + sy * Math.cos(rad)];
+    }
+
+    /**
+     * Why a 2D layer's anchor or position cannot be moved without it jumping,
+     * or "" when it can. Position keyframes are fine (they all move by the same
+     * amount); animated anchor, scale or rotation change that amount over time.
+     */
+    function transformBlocker(layer) {
+        if (isCameraOrLight(layer)) return "camera or light";
+        if (layer.threeDLayer) return "3D layer";
+        var t = layer.property("ADBE Transform Group");
+        if (t.property("ADBE Anchor Point").numKeys > 0) return "animated anchor point";
+        if (t.property("ADBE Scale").numKeys > 0) return "animated scale";
+        if (t.property("ADBE Rotate Z").numKeys > 0) return "animated rotation";
+        return "";
+    }
+
+    /** Move Position by (dx, dy): every keyframe, split X/Y dimensions included. */
+    function offsetPosition(layer, dx, dy) {
+        var t = layer.property("ADBE Transform Group");
+        var pos = t.property("ADBE Position");
+        if (pos.dimensionsSeparated) {
+            var parts = [[t.property("ADBE Position_0"), dx], [t.property("ADBE Position_1"), dy]];
+            for (var p = 0; p < parts.length; p++) {
+                var prop = parts[p][0];
+                if (prop.numKeys > 0) {
+                    for (var k = 1; k <= prop.numKeys; k++) prop.setValueAtKey(k, prop.keyValue(k) + parts[p][1]);
+                } else {
+                    prop.setValue(prop.value + parts[p][1]);
+                }
+            }
+        } else {
+            shiftPointProperty(pos, -dx, -dy);
+        }
+    }
+
+    function reportSkipped(action, skipped) {
+        if (skipped.length) alert(action + " skipped:\n" + skipped.join("\n"));
+    }
+
     function alignAnchorPoint(xRatio, yRatio) {
         var comp = app.project.activeItem;
         if (!comp || !(comp instanceof CompItem)) return;
         var layers = comp.selectedLayers;
         if (layers.length === 0) return;
+        reportSkipped("Anchor point", alignAnchors(comp, layers, xRatio, yRatio));
+    }
 
+    /** Engine: anchor to a point of each layer's content without moving it. Returns what it skipped. */
+    function alignAnchors(comp, layers, xRatio, yRatio) {
+        var skipped = [];
         app.beginUndoGroup("LazyMotion: Align Anchor Point");
         try {
             for (var i = 0; i < layers.length; i++) {
                 var layer = layers[i];
-                if (layer.threeDLayer) continue;
+                try {
+                    var blocker = transformBlocker(layer);
+                    if (blocker) {
+                        skipped.push(layer.name + " (" + blocker + ")");
+                        continue;
+                    }
+                    var t = layer.property("ADBE Transform Group");
+                    var anchorProp = t.property("ADBE Anchor Point");
+                    var r = layer.sourceRectAtTime(comp.time, false);
+                    var curAnchor = anchorProp.value;
+                    var newAnchor = [r.left + r.width * xRatio, r.top + r.height * yRatio, curAnchor[2] || 0];
 
-                var r = layer.sourceRectAtTime(comp.time, false);
-                var newAnchor = [r.left + r.width * xRatio, r.top + r.height * yRatio];
-                var curAnchor = layer.property("Anchor Point").value;
-                var curPos = layer.property("Position").value;
-                var scale = layer.property("Scale").value;
-                var rot = layer.property("Rotation").value;
-
-                var diffX = (newAnchor[0] - curAnchor[0]) * (scale[0] / 100);
-                var diffY = (newAnchor[1] - curAnchor[1]) * (scale[1] / 100);
-
-                var rad = rot * Math.PI / 180;
-                var compDiffX = diffX * Math.cos(rad) - diffY * Math.sin(rad);
-                var compDiffY = diffX * Math.sin(rad) + diffY * Math.cos(rad);
-
-                layer.property("Anchor Point").setValue(newAnchor);
-                layer.property("Position").setValue([curPos[0] + compDiffX, curPos[1] + compDiffY, (curPos[2] || 0)]);
+                    var d = layerToParentDelta(newAnchor[0] - curAnchor[0], newAnchor[1] - curAnchor[1],
+                        t.property("ADBE Scale").value, t.property("ADBE Rotate Z").value);
+                    anchorProp.setValue(newAnchor);
+                    offsetPosition(layer, d[0], d[1]);
+                } catch (eLayer) {
+                    skipped.push(layer.name + " (" + eLayer.toString() + ")");
+                }
             }
-        } catch (e) {
-            alert("Anchor Align Error: " + e.toString());
         } finally {
             app.endUndoGroup();
         }
+        return skipped;
     }
 
+    /**
+     * Put the centre of each layer's visible content (not just its anchor
+     * point) at the centre of the comp. Needs comp space, so parented layers
+     * are left alone.
+     */
     function centerInComp() {
         var comp = app.project.activeItem;
         if (!comp || !(comp instanceof CompItem)) return;
         var layers = comp.selectedLayers;
         if (layers.length === 0) return;
+        reportSkipped("Center in Comp", centerLayers(comp, layers));
+    }
 
+    /** Engine: centre each layer's content in `comp`. Returns what it skipped. */
+    function centerLayers(comp, layers) {
+        var skipped = [];
         app.beginUndoGroup("LazyMotion: Center In Comp");
         try {
             for (var i = 0; i < layers.length; i++) {
-                layers[i].property("Position").setValue([comp.width / 2, comp.height / 2, 0]);
+                var layer = layers[i];
+                try {
+                    var blocker = transformBlocker(layer);
+                    if (!blocker && layer.parent) blocker = "parented — its position is not in comp space";
+                    if (blocker) {
+                        skipped.push(layer.name + " (" + blocker + ")");
+                        continue;
+                    }
+                    var t = layer.property("ADBE Transform Group");
+                    var r = layer.sourceRectAtTime(comp.time, false);
+                    var anchor = t.property("ADBE Anchor Point").value;
+                    var pos = t.property("ADBE Position").valueAtTime(comp.time, false);
+                    var d = layerToParentDelta(r.left + r.width / 2 - anchor[0], r.top + r.height / 2 - anchor[1],
+                        t.property("ADBE Scale").value, t.property("ADBE Rotate Z").value);
+                    offsetPosition(layer, comp.width / 2 - (pos[0] + d[0]), comp.height / 2 - (pos[1] + d[1]));
+                } catch (eLayer) {
+                    skipped.push(layer.name + " (" + eLayer.toString() + ")");
+                }
             }
         } finally {
             app.endUndoGroup();
         }
+        return skipped;
     }
 
     // ============================================================
     // 8. Grid Designer Dialog
     // ============================================================
+    var GRID_MAX_CELLS = 400;
+
+    /**
+     * Cell size for a grid, or { error } when the numbers cannot make one:
+     * margins and gutters wider than the comp would give zero-size tiles, and
+     * thousands of cells would mean thousands of layers.
+     */
+    function computeGrid(compW, compH, cols, rows, gutX, gutY, marX, marY) {
+        cols = Math.max(1, cols || 1);
+        rows = Math.max(1, rows || 1);
+        gutX = Math.max(0, gutX || 0);
+        gutY = Math.max(0, gutY || 0);
+        marX = Math.max(0, marX || 0);
+        marY = Math.max(0, marY || 0);
+        if (cols * rows > GRID_MAX_CELLS) {
+            return { error: cols + " x " + rows + " makes " + (cols * rows) + " layers. Keep it to " + GRID_MAX_CELLS + " cells or fewer." };
+        }
+        var availW = compW - marX * 2 - (cols - 1) * gutX;
+        var availH = compH - marY * 2 - (rows - 1) * gutY;
+        if (availW < cols || availH < rows) {
+            return { error: "The margins and gutters leave no room for the tiles in a " + compW + " x " + compH + " comp. Make them smaller." };
+        }
+        return {
+            cols: cols, rows: rows, gutX: gutX, gutY: gutY, marX: marX, marY: marY,
+            cellW: availW / cols, cellH: availH / rows
+        };
+    }
+
     function showGridMakerDialog() {
         var comp = app.project.activeItem;
         if (!comp || !(comp instanceof CompItem)) {
@@ -1008,21 +1429,23 @@
         btnCancel.onClick = function () { dlg.close(); };
 
         btnCreate.onClick = function () {
-            var cols = Math.max(1, parseInt(editCols.text) || 1);
-            var rows = Math.max(1, parseInt(editRows.text) || 1);
-            var gutX = Math.max(0, parseInt(editGutX.text) || 0);
-            var gutY = Math.max(0, parseInt(editGutY.text) || 0);
-            var marX = Math.max(0, parseInt(editMarX.text) || 0);
-            var marY = Math.max(0, parseInt(editMarY.text) || 0);
             var outType = outDropdown.selection.index;
-
-            var compW = comp.width;
-            var compH = comp.height;
-
-            var availW = compW - (marX * 2) - ((cols - 1) * gutX);
-            var availH = compH - (marY * 2) - ((rows - 1) * gutY);
-            var cellW = Math.max(1, availW / cols);
-            var cellH = Math.max(1, availH / rows);
+            var grid = computeGrid(comp.width, comp.height,
+                parseInt(editCols.text, 10), parseInt(editRows.text, 10),
+                parseInt(editGutX.text, 10), parseInt(editGutY.text, 10),
+                parseInt(editMarX.text, 10), parseInt(editMarY.text, 10));
+            if (grid.error) {
+                alert(grid.error); // the dialog stays open to fix the numbers
+                return;
+            }
+            var cols = grid.cols;
+            var rows = grid.rows;
+            var gutX = grid.gutX;
+            var gutY = grid.gutY;
+            var marX = grid.marX;
+            var marY = grid.marY;
+            var cellW = grid.cellW;
+            var cellH = grid.cellH;
 
             app.beginUndoGroup("LazyMotion: Generate Grid (" + cols + "x" + rows + ")");
             try {
@@ -1199,6 +1622,8 @@
         fParamsRow.add("statictext", undefined, "Spd:");
         var inputFadeSpd = fParamsRow.add("edittext", undefined, "1");
         inputFadeSpd.characters = 3;
+        inputFadeSpd.helpTip = "Speed multiplier: 2 = twice as fast (half the duration), 0.5 = twice as slow";
+        inputFadeDur.helpTip = "Fade length in frames at speed 1";
 
         var fEaseRow = fadePnl.add("group");
         fEaseRow.orientation = "row";
@@ -1238,6 +1663,7 @@
 
         var btnDeleteFade = fActionsRow.add("button", undefined, "❌ Clear");
         btnDeleteFade.size = [60, 24];
+        btnDeleteFade.helpTip = "Remove LazyMotion fades and their fade in / fade out markers (other expressions and markers stay)";
         btnDeleteFade.onClick = deleteFadeTools;
 
         // ---- 4. 9-Point Anchor Point Alignment ----
@@ -1402,7 +1828,7 @@
         renderSwatches();
 
         // ---- Footer / Credits ----
-        var footer = win.add("statictext", undefined, "Developed By RaisulSohan • raisulsohan.com");
+        var footer = win.add("statictext", undefined, "v" + _buildVersion.replace(/\.0$/, "") + " • Developed By RaisulSohan • raisulsohan.com");
         footer.graphics.font = ScriptUI.newFont("sans", "ITALIC", 9);
         footer.alignment = ["center", "bottom"];
 
@@ -1417,6 +1843,39 @@
         }
 
         return win;
+    }
+
+    // tools/test-toolkit.js (and the After Effects smoke test) load this file
+    // with $.global.LazyMotionToolkitTest set, and get the engine back instead
+    // of a panel. Never set in normal use.
+    if (typeof $ !== "undefined" && $.global && $.global.LazyMotionToolkitTest) {
+        $.global.LazyMotionToolkitTest.api = {
+            version: _buildVersion,
+            normalizePalette: normalizePalette,
+            applySwatchColor: applySwatchColor,
+            colorLayers: colorLayers,
+            getMaskBounds: getMaskBounds,
+            canLeaveAttributes: canLeaveAttributes,
+            cropPrecomp: cropPrecomp,
+            executeIndividualPrecomp: executeIndividualPrecomp,
+            executeGroupPrecomp: executeGroupPrecomp,
+            precomposeEach: precomposeEach,
+            precomposeGroup: precomposeGroup,
+            easingFuncs: easingFuncs,
+            buildFadeExpression: buildFadeExpression,
+            isFadeExpression: isFadeExpression,
+            applyFadeTools: applyFadeTools,
+            deleteFadeTools: deleteFadeTools,
+            fadeLayers: fadeLayers,
+            clearFades: clearFades,
+            layerToParentDelta: layerToParentDelta,
+            alignAnchorPoint: alignAnchorPoint,
+            centerInComp: centerInComp,
+            alignAnchors: alignAnchors,
+            centerLayers: centerLayers,
+            computeGrid: computeGrid
+        };
+        return null;
     }
 
     return buildToolkitUI(thisObj);

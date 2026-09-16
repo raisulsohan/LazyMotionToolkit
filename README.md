@@ -4,6 +4,7 @@
   <img src="https://img.shields.io/badge/Adobe%20After%20Effects-2020--2026+-9999FF?style=for-the-badge&logo=adobeaftereffects&logoColor=white" alt="AE Support" />
   <img src="https://img.shields.io/badge/Type-ScriptUI%20Dockable%20Panel-orange?style=for-the-badge" alt="Panel Type" />
   <img src="https://img.shields.io/badge/Engine-ExtendScript%20ES3-blue?style=for-the-badge" alt="ExtendScript" />
+  <img src="https://img.shields.io/badge/License-MIT%20%C2%B7%20Free-yellow?style=for-the-badge" alt="MIT License" />
   <img src="https://img.shields.io/badge/Developed%20By-RaisulSohan-00E676?style=for-the-badge&logo=github" alt="Developer" />
 </p>
 
@@ -13,11 +14,30 @@
 
 <p align="center">
   <a href="https://raisulsohan.com"><strong>🌐 raisulsohan.com</strong></a> • 
-  <a href="#-features">Features</a> • 
+  <a href="#-key-features">Features</a> • 
   <a href="#-installation">Installation</a> • 
-  <a href="#-toolset-overview">Toolset Overview</a> • 
-  <a href="#-credits">Credits</a>
+  <a href="#-development--tests">Tests</a> • 
+  <a href="#-author--credits">Credits</a>
 </p>
+
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.5** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+
+---
+
+## 🆕 What's New in 1.5
+
+Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-smoke-test.jsx`](tools/ae-smoke-test.jsx), as well as by the offline tests.
+
+- **Precomp (1:1) no longer loses animation or cuts the layer.** 1.4 deleted Position/Scale/Rotation keyframes, froze them at the current frame, and started the precomp at the playhead, cutting off everything before it. Footage, solid and comp layers are now precomposed with **all attributes left outside**, so keyframes, effects, masks, time remapping and parenting stay exactly as they were. Shape and text layers keep their in/out points.
+- **Mask cropping is now exact at every frame.** The crop covers the masks across all their keyframes, including Bézier handles, feather and expansion. Inverted or expression-driven masks are never cropped, and the anchor point, mask paths and effect points are moved with the crop. The result: no pixel moves on screen.
+- **Fade Speed works the right way round.** 2 means twice as fast; in 1.4 it meant twice as slow.
+- **Fades respect the layer's own opacity** (a layer at 60% fades between 0 and 60) and start and end on fully transparent frames. A layer shorter than two fades no longer jumps in the middle.
+- **Clear only removes what the toolkit added.** It removes LazyMotion fade expressions and the `fade in` / `fade out` markers. 1.4 deleted every marker and any opacity expression. Applying a fade twice no longer stacks markers, and an opacity expression of your own is never overwritten.
+- **QuickSwatch colours solids again.** The solid check never matched in 1.4. Stroke now works on text layers too, and animated colours get a keyframe instead of an error.
+- **Anchor Point pad handles animated position and split X/Y position.** Center in Comp centres the layer's *content*, not its anchor point.
+- **No silent failures.** Layers that can't be processed (cameras, parented shapes, animated rotation…) are listed with the reason, and one bad layer no longer stops the rest.
+- **Grid Designer** refuses impossible margins and more than 400 cells instead of making hundreds of broken layers.
+- **Group Precomp** refuses to strand a child whose parent isn't selected, and turns on Collapse Transformations when 3D layers go inside, so they keep the scene camera.
 
 ---
 
@@ -30,8 +50,11 @@
 ## 🚀 Key Features
 
 ### 1. 📦 Smart Precomposition Engine
-* **`[ 📦 Precomp (1:1) ]` (Individual Precomp)**: Select multiple layers and precompose each layer into its own isolated, boundary-aware precomposition cropped to its exact layer or mask bounds. Preserves world space transforms and CTI playhead synchronization.
-* **`[ 📁 Precomp (Group) ]` (Group Precomp)**: Combine all selected layers into a single precomposition spanning their collective timeline in/out duration with a single click.
+* **`[ 📦 Precomp (1:1) ]` (Individual Precomp)**: Select multiple layers and precompose each layer into its own precomposition.
+  * **Footage, solids and comps**: attributes stay on the outside ("Leave all attributes"), so every keyframe, effect, mask, time remap and parent is untouched. If the layer has masks, the precomp is cropped to the area they can ever show (over all keyframes, with Bézier handles, feather and expansion). The anchor point, mask paths and effect points move with the crop, so nothing shifts on screen at any frame.
+  * **Shape and text layers**: attributes move inside a comp-sized precomp that keeps the layer's in/out points. Parented or 3D shape/text layers are skipped with a note: use Group Precomp for 3D.
+  * Nulls, cameras and lights are skipped and listed.
+* **`[ 📁 Precomp (Group) ]` (Group Precomp)**: Combine all selected layers into a single precomposition spanning their collective in/out. It refuses (and says why) if a selected layer's parent is not selected. With 3D layers inside, Collapse Transformations is turned on so they keep the scene's camera and lights.
 
 ### 2. 📝 Pixel-Perfect Auto Text Box
 * **Zero Squish / Non-Distorting Roundness**: Unlike traditional box makers that scale layer transform scale, LazyMotionToolkit sizes the vector shape rectangle geometry directly. Corner roundness remains 100% circular and undistorted at any text length or aspect ratio.
@@ -55,22 +78,28 @@
   5. `Ease InOut (Cubic)` (Deep cubic transition)
   6. `Bounce` (Physics-based bounce)
   7. `Elastic` (Spring-damped overshoot)
-* **Custom Parameters**: Control Fade Duration (frames) and Speed Multipliers.
-* **Flexible Application**: Independent `Fade In` and `Fade Out` toggles, with optional timeline **Layer Markers** (`fade in` / `fade out`).
-* **`[ 🚀 Apply Fade ]` & `[ ❌ Clear ]`**: 1-click batch application and expression cleanup across all selected layers.
+* **Custom Parameters**: Fade Duration in frames, and a Speed multiplier (2 = twice as fast, 0.5 = twice as slow).
+* **Keeps your opacity**: the fade scales the layer's own opacity value or keyframes; the first and last frames are fully transparent.
+* **Flexible Application**: Independent `Fade In` and `Fade Out` toggles, with optional timeline **Layer Markers** (`fade in` / `fade out`). Re-applying replaces the fade instead of stacking markers.
+* **`[ 🚀 Apply Fade ]` & `[ ❌ Clear ]`**: batch apply and clean up across selected layers. Fade expressions start with `// LazyMotion Fade`. Apply never overwrites another opacity expression, and Clear removes only LazyMotion fades and their markers.
 
 ### 5. 🎯 9-Point Visual Anchor Point Alignment Pad
 * **Directional Keypad**: Visual 3x3 pad (`◤ ▲ ◥ ◀ ● ▶ ◣ ▼ ◢`) to snap anchor points to Top-Left, Center, Bottom-Right, etc.
-* **Zero Visual Shift**: Compensates layer position in comp space so the layer does not jump when the anchor point moves.
-* **Center in Comp**: 1-click button to align layer centers directly to the composition viewport.
+* **Zero Visual Shift**: Compensates Position (including scale and rotation, every Position keyframe, and separated X/Y Position) so the layer does not jump when the anchor point moves. Layers with animated anchor, scale or rotation, and 3D layers, are skipped with a note, because no single offset could keep them in place.
+* **Center in Comp**: moves the centre of the layer's visible content to the centre of the comp. Parented layers are skipped, since their position isn't in comp space.
 
 ### 6. ⊞ Grid Designer Dialog
 * **Layout Presets**: 1-click presets for `2x2`, `3x3 Rule of Thirds`, `3 Columns Split`, and `12 Columns Web Layout`.
 * **Custom Dimensions**: Full control over Columns, Rows, Gutters (X/Y px), and Margins (X/Y px).
 * **Multiple Output Formats**: Generate solid **Shape Tiles (Fill)**, **Outline Strokes**, or **Guide Nulls**.
+* **Guard rails**: up to 400 cells; margins and gutters that leave no room are refused, and the dialog stays open to fix them.
 
 ### 7. 🎨 QuickSwatch (Live Color Palette)
-* **Instant Fill & Stroke**: 1-click buttons under each swatch to apply colors directly to Shape fills, strokes, Text layers, or Solids.
+* **Instant Fill & Stroke**: 1-click buttons under each swatch.
+  * **Shape layers**: every Fill or Stroke in their contents, nested groups included.
+  * **Text layers**: fill or stroke. Stroke is switched on with a visible width.
+  * **Solids**: Fill, via a Fill effect, so other layers using the same solid keep their colour.
+  * Animated colours get a keyframe at the current time.
 * **Native Color Picker**: Click any swatch tile to open the native OS color dialog (`$.colorPicker`) and update palette colors on the fly.
 * **Configurable Layout**: Customize total swatches (1–10) and grid columns (1–6).
 * **Session Persistence**: Palette configurations and custom colors are automatically saved via `app.settings` across After Effects restarts.
@@ -120,10 +149,29 @@
 
 ---
 
+## 🧪 Development & Tests
+
+The panel is a single file, `LazyMotionToolkit.jsx`. The `tools/` folder is only for development; users never need it.
+
+| Command (Windows) | What it checks |
+| :--- | :--- |
+| `cscript //Nologo tools\check-extendscript.js` | The script compiles as ES3 and avoids names and comments that real ExtendScript rejects. |
+| `cscript //Nologo tools\test-toolkit.js` | The engine against a mocked After Effects: precompose choices and cropping (including After Effects' own re-centring on comp resize), mask bounds, fade expressions evaluated frame by frame, anchor maths, colours, grid limits. |
+| `"C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\AfterFX.com" -noui -r tools\ae-smoke-test.jsx` | The same behaviour **inside the real After Effects**. It builds a throwaway project, measures where pixels land with After Effects' own expression engine, writes `%TEMP%\lazymotion-smoke-results.txt`, and quits without saving. Close After Effects first; needs *Allow Scripts to Write Files*. |
+
+When `$.global.LazyMotionToolkitTest` is set before loading, the script hands back its engine functions instead of building the panel; the tests use this. It is never set in normal use.
+
+---
+
 ## 👨‍💻 Author & Credits
 
 * **Developer**: **Raisul Sohan**
 * **Website**: [https://raisulsohan.com](https://raisulsohan.com)
 * **GitHub**: [@raisulsohan](https://github.com/raisulsohan)
 * **Suite**: LazySuite Creative Tools Ecosystem
-* **License**: Proprietary / Creative Commons — © 2026 Raisul Sohan. All rights reserved.
+
+---
+
+## 📄 License
+
+LazyMotionToolkit is **free and open source** under the [MIT License](LICENSE): use it, share it, change it, including in commercial work.

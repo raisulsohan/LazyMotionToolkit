@@ -60,7 +60,9 @@ inherit(TextLayer, LayerBase);
 inherit(CameraLayer, LayerBase);
 inherit(LightLayer, LayerBase);
 function SolidSource() {}
+function FootageItem() {}
 function MarkerValue(comment) { this.comment = comment; }
+var BlendingMode = { NORMAL: 5212, ADD: 5220 };
 
 var alerts = [];
 function alert(msg) { alerts.push(String(msg)); }
@@ -113,6 +115,11 @@ Prop.prototype.setValueAtTime = function (t, v) {
     this.keys.sort(function (a, b) { return a.time - b.time; });
     this.numKeys = this.keys.length;
 };
+Prop.prototype.setValuesAtTimes = function (times, values) {
+    if (times.length !== values.length) throw new Error("setValuesAtTimes: lengths differ");
+    this.batchCalls = (this.batchCalls || 0) + 1;
+    for (var i = 0; i < times.length; i++) this.setValueAtTime(times[i], values[i]);
+};
 Prop.prototype.setValueAtKey = function (k, v) { if (this.hook) this.hook(); this.keys[k - 1].value = v; };
 Prop.prototype.keyValue = function (k) { if (this.hook) this.hook(); return this.keys[k - 1].value; };
 Prop.prototype.keyTime = function (k) { return this.keys[k - 1].time; };
@@ -157,6 +164,12 @@ Group.prototype.add = function (child) {
 Group.prototype.addProperty = function (matchName) {
     if (matchName === "ADBE Fill") {
         return this.add(new Group("ADBE Fill", [new Prop("ADBE Fill-0002", [1, 0, 0, 1], PropertyValueType.COLOR)]));
+    }
+    if (matchName === "ADBE Lightning 2") {
+        var params = [];
+        var defaults = { "0001": 1, "0002": [0, 0], "0003": [100, 100], "0004": 0, "0008": [1, 1, 1, 1], "0013": [0, 0, 1, 1], "0017": 0.25, "0018": 0.3 };
+        for (var id in defaults) if (defaults.hasOwnProperty(id)) params.push(new Prop("ADBE Lightning 2-" + id, defaults[id]));
+        return this.add(new Group("ADBE Lightning 2", params));
     }
     return this.add(new Group(matchName, []));
 };
@@ -262,6 +275,17 @@ function makeComp(layers) {
     var comp = new CompItem();
     comp.id = nextId++;
     comp.width = 1920; comp.height = 1080; comp.time = 2; comp.frameRate = 25; comp.duration = 20;
+    comp.frameDuration = 1 / 25; comp.pixelAspect = 1; comp.workAreaStart = 0; comp.workAreaDuration = 20;
+    comp.addLayerOnTop = function (layer) {
+        this.list.unshift(layer);
+        this.renumber();
+        var owner = this;
+        layer.remove = function () {
+            for (var i = 0; i < owner.list.length; i++) if (owner.list[i] === layer) owner.list.splice(i, 1);
+            owner.renumber();
+        };
+        return layer;
+    };
     comp.list = layers;
     comp.precomposeCalls = [];
     comp.renumber = function () {
@@ -272,6 +296,12 @@ function makeComp(layers) {
     comp.selectedLayers = [];
     comp.renumber();
     comp.layers = {
+        addSolid: function (color, name, w, h, pixelAspect, duration) {
+            var solid = makeLayer(AVLayer, { name: name, width: w, height: h, inPoint: 0, outPoint: comp.duration, source: { id: nextId++, mainSource: new SolidSource(), color: color } });
+            solid.blendingMode = BlendingMode.NORMAL;
+            solid.solidColor = color;
+            return comp.addLayerOnTop(solid);
+        },
         precompose: function (indices, name, moveAll) {
             comp.precomposeCalls.push({ indices: indices.join(","), name: name, moveAll: moveAll });
             var layer = comp.layer(indices[0]);
@@ -319,6 +349,27 @@ function toParent(layer, p, time) {
 }
 
 // ------------------------------------------------------------ load toolkit
+// A tiny file system for LazyPreview's file clean-up: which files exist, and
+// which ones After Effects still holds open (they can't be deleted yet).
+var existingFiles = {};
+var lockedFiles = {};
+function norm(p) { return String(p).replace(/\//g, "\\").toLowerCase(); }
+function File(p) {
+    this.fsName = String(p).replace(/\//g, "\\");
+    this.exists = !!existingFiles[norm(p)];
+    var cut = this.fsName.lastIndexOf("\\");
+    this.name = this.fsName.substr(cut + 1).replace(/ /g, "%20");
+    var parentPath = this.fsName.substr(0, cut);
+    this.parent = { fsName: parentPath, name: parentPath.substr(parentPath.lastIndexOf("\\") + 1).replace(/ /g, "%20") };
+}
+File.prototype.remove = function () {
+    var key = norm(this.fsName);
+    if (lockedFiles[key]) return false;
+    delete existingFiles[key];
+    this.exists = false;
+    return true;
+};
+
 var $ = { global: { LazyMotionToolkitTest: {} } };
 try {
     eval(read(fso.BuildPath(repoRoot, "LazyMotionToolkit.jsx")));
@@ -663,6 +714,235 @@ section("swatch colours", function () {
     eq("swatch: text stroke turned on with a visible width", last.applyStroke + ":" + last.strokeWidth, "true:2");
     check("swatch: shape without a stroke reported", alerts.length === 1 && alerts[0].indexOf("NoStroke (no stroke") !== -1, alerts.join(" / "));
     eq("swatch: undo balanced", undo.depth, 0);
+});
+
+// ============================================================ LazyStrike FX
+function seq(values) {
+    var i = 0;
+    return function () { var v = values[i % values.length]; i++; return v; };
+}
+function strikeOptions(overrides) {
+    var o = { duration: 10, strikes: 3, gap: 12, flickers: 3, boltColor: [0.75, 0.88, 1], flashColor: [1, 1, 1],
+        boltInt: 0.75, flashInt: 0.8, random: 0.5, threshold: 10, gain: 12, decayFr: 0, minGapFr: 5,
+        makeBolt: false, makeFlash: false, makeSky: false, makeAudio: false, fillWA: true, atTime: false, preComp: false };
+    for (var k in overrides) if (overrides.hasOwnProperty(k)) o[k] = overrides[k];
+    return o;
+}
+
+section("strike schedule", function () {
+    var comp = makeComp([]);
+    comp.workAreaStart = 2; comp.workAreaDuration = 4.4; comp.time = 5;
+    var mid = seq([0.5]); // no jitter
+    var fill = api.strikeTimes(comp, strikeOptions({}), mid);
+    // A strike every (10 + 12) frames = 0.88 s from 2 s, starting before 6.4 s: 2, 2.88, 3.76, 4.64, 5.52.
+    // (6.40 lands exactly on the end of the work area and must not count.)
+    eq("strikes: fill work area count", fill.length, 5);
+    comp.workAreaDuration = 4.5;
+    eq("strikes: one more when the work area runs past 6.40", api.strikeTimes(comp, strikeOptions({}), mid).length, 6);
+    comp.workAreaDuration = 4.4;
+    near("strikes: first at work area start", fill[0], 2);
+    near("strikes: spacing = strike + gap", fill[1] - fill[0], 0.88);
+    eq("strikes: manual count", api.strikeTimes(comp, strikeOptions({ fillWA: false, strikes: 4 }), mid).length, 4);
+    eq("strikes: from CTI", api.strikeTimes(comp, strikeOptions({ atTime: true }), mid)[0], 5);
+    comp.time = 7;
+    eq("strikes: CTI past the work area gives none", api.strikeTimes(comp, strikeOptions({ atTime: true }), mid).length, 0);
+    comp.workAreaStart = 0; comp.workAreaDuration = 20; comp.duration = 20;
+    eq("strikes: capped at 500", api.strikeTimes(comp, strikeOptions({ duration: 0, gap: 0 }), mid).length, 500);
+    var early = api.strikeTimes(comp, strikeOptions({ random: 1 }), seq([0]));
+    check("strikes: jitter never goes below 0 s", early[0] >= 0, early[0]);
+});
+
+section("audio peaks", function () {
+    var t = [0, 0.04, 0.08, 0.12, 0.16, 0.2, 0.24, 0.28, 0.32];
+    var v = [0, 30, 5, 8, 50, 50, 2, 25, 0];
+    var p = api.audioPeaks(t, v, 10, 0);
+    var got = [];
+    for (var i = 0; i < p.length; i++) got.push(p[i].time + "=" + p[i].value);
+    eq("peaks: local maxima above threshold, plateau counted once", got.join(" "), "0.04=30 0.16=50 0.28=25");
+    eq("peaks: minimum gap", api.audioPeaks(t, v, 10, 0.2).length, 2);
+    eq("peaks: threshold", api.audioPeaks(t, v, 40, 0).length, 1);
+});
+
+section("generate lightning", function () {
+    var comp = makeComp([]);
+    comp.workAreaStart = 1; comp.workAreaDuration = 2;
+    var r = api.generateLightning(comp, strikeOptions({ makeBolt: true, makeFlash: true, makeSky: true }), seq([0.1, 0.9, 0.5, 0.3, 0.7]));
+    check("lightning: no error", !r.error, r.error);
+    eq("lightning: three layers", r.layers.length + ":" + comp.numLayers, "3:3");
+    var names = [];
+    for (var i = 1; i <= comp.numLayers; i++) names.push(comp.layer(i).name);
+    eq("lightning: Lazy names", names.join(","), "LazyStrike Sky Flash,LazyStrike Bolt,LazyStrike Flash");
+    var bolt = comp.layer(2);
+    eq("lightning: added as light (Add blend)", bolt.blendingMode + ":" + comp.layer(1).blendingMode, BlendingMode.ADD + ":" + BlendingMode.ADD);
+    var fx = bolt.property("ADBE Effect Parade").property("ADBE Lightning 2");
+    check("lightning: effect added", !!fx);
+    var forking = fx.property(api.LIGHTNING.forking).value;
+    check("lightning: forking stored as a fraction (0.4..0.8)", forking >= 0.4 && forking <= 0.8, forking);
+    eq("lightning: core colour has alpha", fx.property(api.LIGHTNING.coreColor).value.length, 4);
+    var op = T(bolt, "ADBE Opacity");
+    check("lightning: opacity keyed in one call", op.batchCalls === 1 && op.numKeys > 10, op.batchCalls + " / " + op.numKeys);
+    eq("lightning: starts dark", op.keyValue(1), 0);
+    check("lightning: conductivity animated", fx.property(api.LIGHTNING.conductivity).numKeys >= 4);
+    var times = {};
+    var unique = true;
+    for (var k = 0; k < op.keys.length; k++) {
+        if (times["t" + op.keys[k].time]) unique = false;
+        times["t" + op.keys[k].time] = true;
+    }
+    check("lightning: no duplicate key times", unique);
+    check("lightning: layer spans the strikes", bolt.inPoint < 1 && bolt.outPoint > 3 && bolt.outPoint <= comp.duration, bolt.inPoint + "-" + bolt.outPoint);
+
+    var comp2 = makeComp([]);
+    comp2.workAreaStart = 0; comp2.workAreaDuration = 2;
+    var r2 = api.generateLightning(comp2, strikeOptions({ makeSky: true, makeFlash: true, preComp: true }), seq([0.5]));
+    eq("lightning pre-compose: one precomp layer left", r2.layers.length + ":" + comp2.numLayers, "1:1");
+    eq("lightning pre-compose: named", comp2.precomposeCalls[0].name, "LazyStrike Pre-comp");
+
+    var comp3 = makeComp([]);
+    comp3.workAreaStart = 0; comp3.workAreaDuration = 1; comp3.time = 5;
+    var r3 = api.generateLightning(comp3, strikeOptions({ makeSky: true, atTime: true }), seq([0.5]));
+    check("lightning: nothing fits -> error, no layers", !!r3.error && comp3.numLayers === 0, r3.error);
+    eq("lightning: undo balanced", undo.depth, 0);
+});
+
+// ============================================================ LazyPreview Render
+section("preview render job", function () {
+    eq("template: 15 Mbps H.264 preferred", api.findH264Template(["AIFF 48kHz", "H.264 - Match Render Settings -  5 Mbps", "H.264 - Match Render Settings - 15 Mbps"]), "H.264 - Match Render Settings - 15 Mbps");
+    eq("template: any H.264 otherwise", api.findH264Template(["Lossless", "H.264 - Hohe Qualität"]), "H.264 - Hohe Qualität");
+    eq("template: none", api.findH264Template(["Lossless", "WAV"]), null);
+
+    var stamp = api.previewStamp(new Date(2026, 8, 16, 7, 5, 3), 0.5);
+    eq("stamp: dated and unique-ish", stamp, "preview_20260916_070503_5500");
+
+    var base = { windows: true, dir: "D:\\Work\\AE_Previews", token: stamp, aerender: "C:\\AE\\aerender.exe",
+        project: "D:\\Work\\Promo 100%.aep", compName: "Main & 50% Off", output: "D:\\Work\\AE_Previews\\" + stamp + ".mp4",
+        log: "D:\\Work\\AE_Previews\\" + stamp + "-log.txt", marker: "D:\\Work\\AE_Previews\\" + stamp + ".done",
+        template: "H.264 - Match Render Settings - 15 Mbps", startFrame: 25, endFrame: 74 };
+    function b64ToUtf16(s) {
+        var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        var bytes = [], buf = 0, bits = 0;
+        for (var i = 0; i < s.length && s.charAt(i) !== "="; i++) {
+            buf = ((buf << 6) | alphabet.indexOf(s.charAt(i))) & 0xFFFFFF;
+            bits += 6;
+            if (bits >= 8) { bits -= 8; bytes.push((buf >> bits) & 255); }
+        }
+        var out = "";
+        for (var j = 0; j + 1 < bytes.length; j += 2) out += String.fromCharCode(bytes[j] | (bytes[j + 1] << 8));
+        return out;
+    }
+    function encodedPart(commandLine) { return b64ToUtf16(commandLine.split(" -EncodedCommand ")[1].replace(/"$/, "")); }
+    var asciiOnly = /^[\x20-\x7e]*$/;
+
+    var job = api.buildRenderJob(base);
+    eq("ps1: next to the previews", job.runFile, "D:\\Work\\AE_Previews\\" + stamp + ".ps1");
+    check("ps1: comp name one literal, % and & untouched", job.runBody.indexOf("'-comp', 'Main & 50% Off'") !== -1, job.runBody);
+    check("ps1: project path literal", job.runBody.indexOf("$project = 'D:\\Work\\Promo 100%.aep'") !== -1);
+    check("ps1: aerender gets short (ASCII) paths, or a clear PATH marker",
+        job.runBody.indexOf("$fso.GetFile($project).ShortPath") !== -1 && job.runBody.indexOf("-Value 'PATH'") !== -1 &&
+        job.runBody.indexOf("'-project', $project, '-comp'") !== -1 && job.runBody.indexOf("'-output', $output") !== -1, job.runBody);
+    check("ps1: frame range", job.runBody.indexOf("'-s', '25', '-e', '74'") !== -1);
+    check("ps1: log in UTF-8, exit code to the marker",
+        job.runBody.indexOf("Out-File -LiteralPath $log -Encoding utf8") !== -1 && job.runBody.indexOf("Set-Content -LiteralPath $marker -Value $LASTEXITCODE") !== -1);
+    eq("ps1: written with a BOM and CRLF", job.bom + ":" + job.lineFeed, "true:Windows");
+    check("encoded round trip", encodedPart("x -EncodedCommand " + api.utf16leBase64("A\u09AA'z")) === "A\u09AA'z");
+    function hex(s) { var h = []; for (var i = 0; i < s.length; i++) h.push(s.charCodeAt(i).toString(16)); return h.join(" "); }
+    eq("utf8: ASCII", hex(api.utf8Bytes("A")), "41");
+    eq("utf8: two bytes (\u00E9)", hex(api.utf8Bytes("\u00E9")), "c3 a9");
+    eq("utf8: three bytes (Bengali \u09AA)", hex(api.utf8Bytes("\u09AA")), "e0 a6 aa");
+    eq("utf8: four bytes (emoji via surrogates)", hex(api.utf8Bytes("\uD83C\uDFAC")), "f0 9f 8e ac");
+    check("launch: plain ASCII command line", asciiOnly.test(job.launch));
+    var launcher = encodedPart(job.launch);
+    check("launch: hidden PowerShell runs the ps1, path quoted inside",
+        launcher.indexOf("Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden") === 0 && launcher.indexOf("'\"D:\\Work\\AE_Previews\\" + stamp + ".ps1\"'") !== -1, launcher);
+    eq("run and wait: calls the ps1", encodedPart(job.runAndWait), "& 'D:\\Work\\AE_Previews\\" + stamp + ".ps1'");
+    var canceller = encodedPart(job.cancel);
+    check("cancel: only the aerender carrying this token, whole tree", canceller.indexOf("-like '*" + stamp + "*'") !== -1 && canceller.indexOf("/T /F") !== -1, canceller);
+
+    // A Bengali folder and an apostrophe: kept exactly in the script, never on the command line.
+    base.project = "D:\\\u09AA\u09CD\u09B0\u099C\u09C7\u0995\u09CD\u099F\\It's \u2019x.aep";
+    base.compName = "Main";
+    var uni = api.buildRenderJob(base);
+    check("unicode: kept in the script, quotes doubled", uni.runBody.indexOf("'D:\\\u09AA\u09CD\u09B0\u099C\u09C7\u0995\u09CD\u099F\\It''s \u2019\u2019x.aep'") !== -1, uni.runBody);
+    check("unicode: command lines stay ASCII", asciiOnly.test(uni.launch) && asciiOnly.test(uni.runAndWait) && asciiOnly.test(uni.cancel));
+
+    base.compName = "Say \"hi\"";
+    check("double quote in comp name refused", !!api.buildRenderJob(base).error);
+    base.compName = "It's fine";
+    check("apostrophe in comp name allowed", !api.buildRenderJob(base).error);
+    base.compName = "\u09AE\u09C2\u09B2 comp";
+    var bengaliComp = api.buildRenderJob(base);
+    check("Windows: non-English comp name refused with advice (aerender can't match it)", !!bengaliComp.error && bengaliComp.error.indexOf("Rename") !== -1, bengaliComp.error);
+    base.compName = "Main";
+    base.powershell = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+    var withPath = api.buildRenderJob(base);
+    check("PowerShell by full path, started through cmd (called directly from After Effects it exits at once)",
+        withPath.launch.indexOf("cmd /c \"\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoProfile") === 0 &&
+        withPath.launch.charAt(withPath.launch.length - 1) === "\"" &&
+        encodedPart(withPath.launch).indexOf("Start-Process -FilePath 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'") === 0, withPath.launch.substring(0, 90));
+
+    var mac = api.buildRenderJob({ windows: false, dir: "/Users/me/AE_Previews", token: stamp, aerender: "/Applications/Adobe After Effects 2026/aerender",
+        project: "/Users/me/It's.aep", compName: "Main", output: "/o.mp4", log: "/l.txt", marker: "/m.done", template: "H.264", startFrame: 0, endFrame: 9 });
+    check("sh: single quotes escaped", mac.runBody.indexOf("'/Users/me/It'\\''s.aep'") !== -1, mac.runBody);
+    eq("sh: Unix line feeds, no BOM", mac.bom + ":" + mac.lineFeed, "false:Unix");
+    var macBengali = api.buildRenderJob({ windows: false, dir: "/p", token: stamp, aerender: "/a", project: "/p.aep", compName: "মূল", output: "/o.mp4", log: "/l", marker: "/m", template: "H.264", startFrame: 0, endFrame: 1 });
+    check("macOS: non-English comp name allowed (UTF-8 command line)", !macBengali.error);
+    check("sh: exit code written", mac.runBody.indexOf("echo $? > '/m.done'") !== -1);
+    eq("sh: cancel by token", mac.cancel, "pkill -f '" + stamp + "'");
+});
+
+section("preview layer housekeeping", function () {
+    function fakeFile(folder, name) {
+        return { parent: { name: folder }, name: name, exists: true, removed: false, remove: function () { this.removed = true; this.exists = false; return true; } };
+    }
+    check("preview file: ours", api.isPreviewFile(fakeFile("AE_Previews", "preview_20260916_070503_5500.mp4")));
+    check("preview file: user's own clip is not", !api.isPreviewFile(fakeFile("Footage", "preview_final.mp4")));
+    check("preview file: other extension is not", !api.isPreviewFile(fakeFile("AE_Previews", "preview_x.mov")));
+
+    function previewLayer(file) {
+        var src = new FootageItem();
+        src.usedIn = [];
+        src.file = file;
+        src.remove = function () { this.gone = true; };
+        var l = makeLayer(AVLayer, { name: "[PREVIEW] preview", source: src });
+        l.solo = true; l.enabled = true;
+        return l;
+    }
+    existingFiles = {};
+    lockedFiles = {};
+    var oursPath = "D:\\Work\\AE_Previews\\preview_20260916_070503_5500.mp4";
+    existingFiles[norm(oursPath)] = {};
+    var comp = makeComp([]);
+    var layer = comp.addLayerOnTop(previewLayer(new File(oursPath)));
+    comp.addLayerOnTop(makeLayer(AVLayer, { name: "Other", source: { id: 77 } }));
+    eq("toggle: off", api.togglePreviewLayer(comp), false);
+    eq("toggle: solo and enabled follow", layer.solo + ":" + layer.enabled, "false:false");
+    eq("toggle: on again", api.togglePreviewLayer(comp), true);
+    eq("toggle: on means visible and solo", layer.solo + ":" + layer.enabled, "true:true");
+    check("remove: done", api.removePreviewLayer(comp));
+    check("remove: layer, footage and rendered file gone", comp.numLayers === 1 && layer.source.gone && !existingFiles[norm(oursPath)]);
+    eq("remove: nothing left to remove", api.removePreviewLayer(comp), false);
+    eq("toggle: none", api.togglePreviewLayer(comp), null);
+
+    // After Effects still holds a file it imported: queued, then deleted once released.
+    var heldPath = "D:\\Work\\AE_Previews\\preview_20260916_080000_1234.mp4";
+    existingFiles[norm(heldPath)] = {};
+    lockedFiles[norm(heldPath)] = true;
+    var comp3 = makeComp([]);
+    comp3.addLayerOnTop(previewLayer(new File(heldPath)));
+    api.removePreviewLayer(comp3);
+    check("remove, file held open: kept for later, not lost", !!existingFiles[norm(heldPath)] && api.pendingPreviewDeletes().join("|").indexOf("080000_1234.mp4") !== -1, api.pendingPreviewDeletes().join("|"));
+    eq("remove, file held open: next try while still held", api.deletePreviewFiles(null), 1);
+    delete lockedFiles[norm(heldPath)];
+    eq("remove, file released: deleted on the next try", api.deletePreviewFiles(null) + ":" + !!existingFiles[norm(heldPath)], "0:false");
+    eq("remove, file released: queue emptied", api.pendingPreviewDeletes().length, 0);
+
+    var userPath = "D:\\Work\\Footage\\my_edit.mp4";
+    existingFiles[norm(userPath)] = {};
+    var comp2 = makeComp([]);
+    comp2.addLayerOnTop(previewLayer(new File(userPath)));
+    api.removePreviewLayer(comp2);
+    api.deletePreviewFiles(userPath); // even if one were queued by mistake
+    check("remove: a file LazyPreview did not render is never deleted", !!existingFiles[norm(userPath)]);
 });
 
 // ------------------------------------------------------------------ report

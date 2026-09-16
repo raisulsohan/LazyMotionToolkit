@@ -256,6 +256,186 @@
             check("swatch: text stroke on and visible", skipped2.length === 0 && doc.applyStroke && doc.strokeWidth > 0 && near(doc.strokeColor[1], 1),
                 doc.applyStroke + " " + doc.strokeWidth);
         });
+        section("LazyStrike FX", function () {
+            var sc = app.project.items.addComp("Storm", 1280, 720, 1, 6, 25);
+            sc.workAreaStart = 1;
+            sc.workAreaDuration = 2;
+            var opts = {
+                duration: 10, strikes: 3, gap: 12, flickers: 3, boltColor: [0.75, 0.88, 1], flashColor: [1, 1, 1],
+                boltInt: 0.75, flashInt: 0.8, random: 0.5, threshold: 10, gain: 12, decayFr: 0, minGapFr: 5,
+                makeBolt: true, makeFlash: true, makeSky: true, makeAudio: false, fillWA: true, atTime: false, preComp: false
+            };
+            var r = api.generateLightning(sc, opts);
+            check("lightning: made without error", !r.error && r.layers.length === 3 && sc.numLayers === 3, r.error || r.layers.length);
+            var bolt = null;
+            for (var i = 1; i <= sc.numLayers; i++) if (sc.layer(i).name === "LazyStrike Bolt") bolt = sc.layer(i);
+            check("lightning: bolt layer in Add mode", bolt && bolt.blendingMode === BlendingMode.ADD);
+            var fx = bolt.property("ADBE Effect Parade").property(api.LIGHTNING.effect);
+            var forking = fx.property(api.LIGHTNING.forking).value;
+            check("lightning: forking 40-80%", forking >= 0.4 && forking <= 0.8, forking);
+            var core = fx.property(api.LIGHTNING.coreColor).value;
+            check("lightning: core colour set", near(core[0], 0.75, 0.01) && near(core[2], 1, 0.01), core.join(","));
+            var op = bolt.property("ADBE Transform Group").property("ADBE Opacity");
+            check("lightning: opacity keyframed", op.numKeys > 10, op.numKeys);
+            check("lightning: conductivity keyframed", fx.property(api.LIGHTNING.conductivity).numKeys >= 4);
+            check("lightning: direction keyframed", fx.property(api.LIGHTNING.direction).numKeys >= 1);
+
+            opts.preComp = true;
+            opts.makeBolt = false;
+            opts.makeFlash = false;
+            var r2 = api.generateLightning(sc, opts);
+            check("lightning: pre-compose leaves one layer", !r2.error && r2.layers.length === 1 && r2.layers[0].source instanceof CompItem, r2.error);
+
+            // A 2 s mono WAV: silence with loud bursts at 0.5 s and 1.3 s.
+            var rate = 22050;
+            var n = rate * 2;
+            function u16(v) { return String.fromCharCode(v & 255, (v >> 8) & 255); }
+            function u32(v) { return String.fromCharCode(v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >>> 24) & 255); }
+            var chunks = ["RIFF", u32(36 + n * 2), "WAVE", "fmt ", u32(16), u16(1), u16(1), u32(rate), u32(rate * 2), u16(2), u16(16), "data", u32(n * 2)];
+            var block = [];
+            for (var sIdx = 0; sIdx < n; sIdx++) {
+                var t = sIdx / rate;
+                var loud = (t > 0.5 && t < 0.62) || (t > 1.3 && t < 1.42);
+                var sample = loud ? Math.round(Math.sin(2 * Math.PI * 440 * t) * 29000) : 0;
+                if (sample < 0) sample += 65536;
+                block.push(u16(sample));
+                if (block.length === 4096) { chunks.push(block.join("")); block = []; }
+            }
+            chunks.push(block.join(""));
+            var wav = new File(Folder.temp.fsName + "/lazystrike-thunder.wav");
+            wav.encoding = "BINARY";
+            wav.open("w");
+            wav.write(chunks.join(""));
+            wav.close();
+
+            var ac = app.project.items.addComp("Thunder", 640, 360, 1, 3, 25);
+            var audio = ac.layers.add(app.project.importFile(new ImportOptions(wav)));
+            check("audio: WAV imported as audio", audio.hasAudio && !audio.hasVideo);
+            // Audio-Driven runs the Convert Audio to Keyframes menu command, which
+            // stops a UI-less (-noui) After Effects. It is covered by
+            // tools/ae-ui-test-audio.jsx, run with the normal window.
+            lines.push("note: audio-driven flash is tested by tools/ae-ui-test-audio.jsx (needs the After Effects UI)");
+        });
+
+        section("LazyPreview Render", function () {
+            // A saved project in a folder with spaces and non-ASCII letters, a comp
+            // name with % and &: the awkward cases for batch files.
+            var dir = new Folder(Folder.temp.fsName + "/lazymotion smoke " + "পরীক্ষা");
+            if (!dir.exists) dir.create();
+            app.project.save(new File(dir.fsName + "/smoke.aep"));
+            check("preview: project saved", !!app.project.file, dir.fsName);
+
+            var pc = app.project.items.addComp("Preview 50% & Test", 320, 180, 1, 2, 25);
+            pc.layers.addSolid([0.1, 0.5, 0.9], "BG", 320, 180, 1, 2);
+            pc.workAreaStart = 0.4;
+            pc.workAreaDuration = 0.8;
+            app.project.save(); // aerender renders the saved file, as the panel's Render button does
+
+            var aer = api.getAerenderPath();
+            check("preview: aerender found", !!aer, aer);
+            var template = api.findH264Template(api.outputTemplatesFor(pc));
+            check("preview: H.264 template found", !!template, template);
+            check("preview: render queue left empty", app.project.renderQueue.numItems === 0);
+
+            var folder = new Folder(dir.fsName + "/AE_Previews");
+            if (!folder.exists) folder.create();
+            function job(token, comp, start, end) {
+                return api.buildRenderJob({
+                    windows: $.os.indexOf("Windows") !== -1, powershell: api.powershellPath(), dir: folder.fsName, token: token, aerender: aer,
+                    project: app.project.file.fsName, compName: comp.name, template: template,
+                    output: folder.fsName + "\\" + token + ".mp4", log: folder.fsName + "\\" + token + "-log.txt",
+                    marker: folder.fsName + "\\" + token + ".done", startFrame: start, endFrame: end
+                });
+            }
+
+            var token = api.previewStamp(new Date(), 0.1);
+            var j = job(token, pc, 10, 29);
+            api.writeTextFile(j.runFile, j.runBody, j.bom, j.lineFeed);
+            // (The BOM itself can't be checked from here: ExtendScript skips it
+            // when reading, in any mode. Checked from outside: EF BB BF.)
+            var raw = new File(j.runFile);
+            raw.encoding = "BINARY";
+            var text = new File(j.runFile);
+            text.encoding = "UTF-8";
+            text.open("r");
+            var content = text.read();
+            text.close();
+            check("preview script: Bengali folder name written intact", content.indexOf("পরীক্ষা") !== -1);
+            raw.open("r");
+            var allBytes = raw.read();
+            raw.close();
+            check("preview script: CRLF line endings", allBytes.indexOf("\r\n") !== -1 && allBytes.replace(/\r\n/g, "").indexOf("\n") === -1);
+            var t0 = new Date().getTime();
+            system.callSystem(j.runAndWait);
+            var secs = Math.round((new Date().getTime() - t0) / 1000);
+            var marker = new File(folder.fsName + "/" + token + ".done");
+            var code = "";
+            if (marker.exists) { marker.open("r"); code = marker.read().replace(/\s+/g, ""); marker.close(); }
+            var mp4 = new File(folder.fsName + "/" + token + ".mp4");
+            var logTail = "";
+            if (!mp4.exists) {
+                var lf = new File(folder.fsName + "/" + token + "-log.txt");
+                if (lf.exists) { lf.encoding = "UTF-8"; lf.open("r"); logTail = lf.read(); lf.close(); logTail = logTail.substring(Math.max(0, logTail.length - 600)); }
+            }
+            check("preview: aerender rendered the work area (" + secs + " s)", code === "0" && mp4.exists && mp4.length > 0, "exit " + code + " " + logTail);
+
+            if (mp4.exists) {
+                var layer = api.placePreview(pc, mp4, pc.workAreaStart, pc.workAreaDuration);
+                check("preview layer: on top, solo, named", pc.layer(1) === layer && layer.solo && layer.name === "[PREVIEW] preview");
+                check("preview layer: spans the work area", near(layer.inPoint, 0.4) && near(layer.outPoint, 1.2), layer.inPoint + "-" + layer.outPoint);
+                check("preview layer: footage in Lazy Preview Files", layer.source.parentFolder.name === "Lazy Preview Files", layer.source.parentFolder.name);
+                check("preview layer: toggle off", api.togglePreviewLayer(pc) === false && !layer.enabled);
+                api.togglePreviewLayer(pc);
+                var footageId = layer.source.id;
+                var removed = api.removePreviewLayer(pc);
+                check("preview remove: layer gone", removed && !api.findPreviewLayer(pc));
+                var footageLeft = false;
+                for (var fi = 1; fi <= app.project.numItems; fi++) if (app.project.item(fi).id === footageId) footageLeft = true;
+                check("preview remove: footage item gone", !footageLeft);
+                var leftover = new File(folder.fsName + "/" + token + ".mp4");
+                if (leftover.exists) {
+                    // After Effects still holds the file it imported: it must be queued, not lost.
+                    var queued = api.pendingPreviewDeletes().join("\n").indexOf(token + ".mp4") !== -1;
+                    check("preview remove: file After Effects still holds is queued for deletion", queued);
+                    app.purge(PurgeTarget.IMAGE_CACHES); // stands in for "later" (e.g. After Effects restarting)
+                    check("preview remove: queued file deleted on the next try", api.deletePreviewFiles(null) === 0 && !leftover.exists);
+                } else {
+                    check("preview remove: rendered file deleted", true);
+                }
+            }
+
+            // Cancel stops only this render: a long one, launched in the background.
+            var big = app.project.items.addComp("Long render", 1920, 1080, 1, 30, 25);
+            var heavy = big.layers.addSolid([0.5, 0.5, 0.5], "Noise", 1920, 1080, 1, 30);
+            heavy.property("ADBE Effect Parade").addProperty("ADBE Fractal Noise");
+            app.project.save();
+            var token2 = api.previewStamp(new Date(), 0.9);
+            var j2 = job(token2, big, 0, 749);
+            api.writeTextFile(j2.runFile, j2.runBody, j2.bom, j2.lineFeed);
+            var l0 = new Date().getTime();
+            system.callSystem(j2.launch);
+            var launchSecs = (new Date().getTime() - l0) / 1000;
+            check("cancel test: launch returns while the render keeps going", launchSecs < 15, launchSecs + " s");
+            var running = false;
+            for (var w = 0; w < 60 && !running; w++) {
+                $.sleep(1000);
+                running = system.callSystem("tasklist /FI \"IMAGENAME eq aerender.exe\" /NH").indexOf("aerender.exe") !== -1;
+            }
+            check("cancel test: background aerender running", running);
+            $.sleep(3000);
+            system.callSystem(j2.cancel);
+            var stopped = false;
+            for (var w2 = 0; w2 < 20 && !stopped; w2++) {
+                $.sleep(1000);
+                stopped = system.callSystem("tasklist /FI \"IMAGENAME eq aerender.exe\" /NH").indexOf("aerender.exe") === -1;
+            }
+            check("cancel: aerender stopped", stopped);
+            var marker2 = new File(folder.fsName + "/" + token2 + ".done");
+            for (var w3 = 0; w3 < 15 && !marker2.exists; w3++) $.sleep(1000);
+            var code2 = "";
+            if (marker2.exists) { marker2.open("r"); code2 = marker2.read().replace(/\s+/g, ""); marker2.close(); }
+            check("cancel: batch file still reported an exit code", marker2.exists && code2 !== "0", code2);
+        });
     } catch (fatal) {
         check("smoke test stopped", false, fatal.toString() + " (line " + fatal.line + ")");
     }

@@ -2,6 +2,40 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.6.0
+
+Checked inside After Effects 2026 (26.5): `tools/ae-smoke-test.jsx`, `tools/ae-ui-test-audio.jsx`, `tools/ae-ui-test-panel.jsx`; offline with `tools/test-toolkit.js`.
+
+### ⚡ LazyStrike FX (merged from QuickStrike FX)
+- Opens from the Motion Tools panel as its own window.
+- Lightning parameters found by match name, so any After Effects language works.
+- Fixed: Forking was set to 40–80 on a 0–1 scale, so it was always maxed out.
+- Colours passed with alpha; keyframes set with one `setValuesAtTimes` per property; duplicate key times merged.
+- Audio-Driven:
+  - Convert Audio to Keyframes found by its English name, or by command ID in a translated After Effects.
+  - The Both Channels slider found by position, not by its translated name.
+  - The temporary Audio Amplitude layer is removed.
+  - Work area and selection are restored.
+- Work areas set through a helper, because After Effects adjusts start and duration against each other.
+- No empty layers when no strike fits; a clear message instead.
+- Plateau peaks counted once; a strike landing exactly on the end of the work area no longer counts.
+- Layers named `LazyStrike …`; one undo step.
+- Removed a leftover chat comment from the old script.
+
+### 🎬 LazyPreview Render (merged from QuickPreviewRender)
+- A LazyPreview Render section in the panel: Render In→Out, Toggle, Remove, and a status line.
+- **Cancel stops only this render.** It finds aerender by the unique output name in its command line and ends that process tree. The old script ran `taskkill /IM aerender.exe`, killing every render.
+- Finished means aerender exited: the runner writes its exit code to a marker file. It no longer guesses from the file size, and there is no 15-minute timeout.
+- Refuses to start when another composition has the same name, because aerender picks by name.
+- H.264 output template chosen from the installed templates (15 Mbps preferred), so translated template names work. Render settings come from After Effects' default template instead of `-RStemplate "Best Settings"`, a name that changes in a translated After Effects.
+- Windows:
+  - aerender runs from a PowerShell script (UTF-8 with BOM), started through `cmd`, with the command line passed as `-EncodedCommand`.
+  - Project and output paths reach aerender as 8.3 short paths, so folders with non-English letters work; when no short name exists, a clear message instead.
+  - Composition names outside English letters are refused with advice.
+- Fixed: Toggle could not turn the preview back on (After Effects refuses solo on a hidden layer).
+- Remove also deletes the rendered file. A file After Effects still holds open is queued and deleted on the next render or panel launch, rather than purging the user's RAM previews.
+- Preview footage goes to the *Lazy Preview Files* bin (an existing *Quick Preview Files* bin is reused); red label.
+
 ## 1.5.0
 
 Checked inside After Effects 2026 (26.5) with `tools/ae-smoke-test.jsx`, and offline with `tools/test-toolkit.js`.

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>The ultimate Swiss Army Knife for After Effects motion designers. Combines smart boundary-aware precomposing, non-distorting auto text boxes, advanced mathematical fade animators, interactive 9-point anchor alignment, grid generation, and live color palettes in a single dockable panel.</strong>
+  <strong>The ultimate Swiss Army Knife for After Effects motion designers. Combines smart boundary-aware precomposing, non-distorting auto text boxes, advanced mathematical fade animators, interactive 9-point anchor alignment, grid generation, live color palettes, a lightning generator and background preview renders in a single dockable panel.</strong>
 </p>
 
 <p align="center">
@@ -20,11 +20,29 @@
   <a href="#-author--credits">Credits</a>
 </p>
 
-Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.5** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.6** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
 
 ---
 
-## 🆕 What's New in 1.5
+## 🆕 What's New in 1.6
+
+Two tools that used to be separate scripts are now part of the panel, fixed along the way. Everything was checked inside After Effects 2026 (26.5).
+
+- **⚡ LazyStrike FX** (was *QuickStrike FX*): lightning bolts, flashes and sky flashes, by timing or driven by audio.
+  - Effect settings are found by match name, so it works in any After Effects language.
+  - Fixed: Forking was always maxed out.
+  - Keyframes are set in one call per property (faster).
+  - Audio-Driven removes its temporary Audio Amplitude layer and puts back your work area and selection.
+  - If nothing fits (the playhead is past the work area) it says so instead of making empty layers.
+- **🎬 LazyPreview Render** (was *QuickPreviewRender*): renders the work area to H.264 in the background and plays it back as a solo'd layer.
+  - **Cancel stops only this render.** It used to kill every aerender on the computer.
+  - It knows a render has finished when aerender actually exits, not when the file size stops changing.
+  - It refuses to render the wrong comp when two share a name.
+  - **Remove deletes the rendered file too.** If After Effects is still holding it open, the file is deleted on a later try.
+  - **Toggle can switch the preview back on.** It used to fail.
+  - It works from project folders with non-English letters (e.g. Bengali): paths reach aerender in their short ASCII form.
+
+## What's New in 1.5
 
 Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-smoke-test.jsx`](tools/ae-smoke-test.jsx), as well as by the offline tests.
 
@@ -43,7 +61,7 @@ Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-sm
 
 ## 🌟 Overview
 
-**LazyMotionToolkit** is a lightweight, high-performance ScriptUI panel designed to eliminate repetitive motion design tasks. It unifies five essential toolsets into one cohesive workflow without relying on external plugins or bloated dependencies.
+**LazyMotionToolkit** is a lightweight, high-performance ScriptUI panel designed to eliminate repetitive motion design tasks. It unifies nine toolsets into one cohesive workflow without relying on external plugins or bloated dependencies.
 
 ---
 
@@ -106,6 +124,43 @@ Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-sm
 
 ---
 
+### 8. ⚡ LazyStrike FX (Lightning & Sky Flash)
+Click **`⚡ LazyStrike FX`** to open its window (it stays open while you work).
+* **Styles**:
+  * `Direct Bolt + Flash`: an animated Advanced Lightning bolt plus a full-frame flash.
+  * `Sky Flash`: decaying flickers across the frame.
+  * `Both Combined`: bolt, flash and sky flash together.
+  * `Audio-Driven`: one flash per loud peak of an audio layer.
+* **Colors**: Bolt and Flash, via the system colour picker.
+* **Timing**: strike length and gap (frames), number of strikes, sky flickers per strike. Either fill the work area, or start at the playhead.
+* **Intensity & Randomness**: bolt and flash brightness, and how irregular the strikes are.
+* **Audio Sync** (Audio-Driven):
+  * `Threshold`: how loud a peak must be.
+  * `Gain`: how bright its flash gets.
+  * `Decay`: frames each flash holds.
+  * `Min Gap`: frames between flashes.
+  * It uses After Effects' *Convert Audio to Keyframes*, then removes the helper layer and restores your work area and selection.
+* **Pre-compose** option wraps the generated layers in one precomp.
+* Layers are Add-mode solids named `LazyStrike …`; everything is one undo step.
+
+### 9. 🎬 LazyPreview Render (Smooth Playback of Heavy Comps)
+Like Premiere Pro's *Render In to Out*.
+* **`▶ Render In→Out`**:
+  1. Set the work area (`B` / `N`) first.
+  2. The panel **saves the project**, then renders the work area with `aerender` to `AE_Previews/preview_<date>_<time>_<n>.mp4` next to the project, using H.264 at 15 Mbps.
+  3. The render runs in the background while you keep working, with a Cancel button.
+  4. When it finishes, the video goes on top of the comp as a solo'd `[PREVIEW] preview` layer (red label), spanning the work area. Its footage goes in the *Lazy Preview Files* bin.
+* **`Toggle`**: switch between the preview and the live comp.
+* **`Remove`**: delete the preview layer, its footage and the rendered file. A file After Effects still holds open is deleted the next time you render or open the panel.
+* **Needs**:
+  * a saved project;
+  * After Effects 2023 or newer (for the H.264 output module);
+  * on Windows, a composition name in English letters (aerender can't receive other letters there).
+* **Good to know**:
+  * Project folders with other letters work when Windows short names are available, which is the default on the system drive. Otherwise the panel explains what to change.
+  * Cancel stops only this render's aerender.
+  * If two compositions share a name, rename one first: aerender picks compositions by name.
+
 ## 💻 Installation
 
 ### Method 1: Dockable ScriptUI Panel (Recommended)
@@ -157,7 +212,9 @@ The panel is a single file, `LazyMotionToolkit.jsx`. The `tools/` folder is only
 | :--- | :--- |
 | `cscript //Nologo tools\check-extendscript.js` | The script compiles as ES3 and avoids names and comments that real ExtendScript rejects. |
 | `cscript //Nologo tools\test-toolkit.js` | The engine against a mocked After Effects: precompose choices and cropping (including After Effects' own re-centring on comp resize), mask bounds, fade expressions evaluated frame by frame, anchor maths, colours, grid limits. |
-| `"C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\AfterFX.com" -noui -r tools\ae-smoke-test.jsx` | The same behaviour **inside the real After Effects**. It builds a throwaway project, measures where pixels land with After Effects' own expression engine, writes `%TEMP%\lazymotion-smoke-results.txt`, and quits without saving. Close After Effects first; needs *Allow Scripts to Write Files*. |
+| `"C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\AfterFX.com" -noui -r tools\ae-smoke-test.jsx` | The same behaviour **inside the real After Effects**: pixel placement measured with After Effects' own expression engine, fades, colours, LazyStrike layers, and a real aerender preview render (from a folder with Bengali letters) including Cancel. It writes `%TEMP%\lazymotion-smoke-results.txt` and quits without saving. Close After Effects first; needs *Allow Scripts to Write Files*. |
+| `… AfterFX.com -r tools\ae-ui-test-audio.jsx` | LazyStrike's Audio-Driven mode, which needs After Effects' UI (no `-noui`): a generated WAV with two bursts must give two flashes, with the helper layer removed and the work area restored. Results in `%TEMP%\lazystrike-audio-results.txt`. |
+| `… AfterFX.com -r tools\ae-ui-test-panel.jsx` | Builds the real panel and the LazyStrike FX window. Results in `%TEMP%\lazymotion-panel-results.txt`. |
 
 When `$.global.LazyMotionToolkitTest` is set before loading, the script hands back its engine functions instead of building the panel; the tests use this. It is never set in normal use.
 

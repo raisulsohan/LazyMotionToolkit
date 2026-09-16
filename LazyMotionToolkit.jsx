@@ -6,7 +6,8 @@
   Description: All-in-One Motion Graphics Toolkit for Adobe After Effects.
                Includes Smart Precomp (1:1 & Group), Auto Text Box,
                Fade Tools Pro (7 Easing Curves), Head to Line (Animated Arrows),
-               Grid Designer, 9-Point Anchor Aligner, and Live Color Swatches.
+               Grid Designer, 9-Point Anchor Aligner, Live Color Swatches,
+               LazyStrike FX (lightning) and LazyPreview Render.
   Copyright (c) 2026 Raisul Sohan. Free and open source under the MIT License.
 ========================================================================
 */
@@ -17,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.5.0";
+    var _buildVersion     = "1.6.0";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -1500,7 +1501,1069 @@
     }
 
     // ============================================================
-    // 9. Main ScriptUI Window / Panel Builder
+    // 9. LazyStrike FX: lightning, flash and sky flash generator
+    //    (formerly the separate QuickStrike FX script)
+    // ============================================================
+
+    // Effect parameters by match name: display names such as "Core Color" are
+    // translated in other After Effects languages, match names never are.
+    var LIGHTNING = {
+        effect: "ADBE Lightning 2",
+        type: "ADBE Lightning 2-0001",
+        origin: "ADBE Lightning 2-0002",
+        direction: "ADBE Lightning 2-0003",
+        conductivity: "ADBE Lightning 2-0004",
+        coreColor: "ADBE Lightning 2-0008",
+        glowColor: "ADBE Lightning 2-0013",
+        forking: "ADBE Lightning 2-0017",
+        decay: "ADBE Lightning 2-0018"
+    };
+    // "Convert Audio to Keyframes" is looked up by its English menu name; a
+    // translated After Effects falls back to its command ID (2026).
+    var CONVERT_AUDIO_COMMAND_ID = 4218;
+    var MAX_STRIKES = 500;
+
+    var strikeColors = { bolt: [0.75, 0.88, 1.0], flash: [1.0, 1.0, 1.0] };
+    var strikeWindow = null;
+
+    /** When each strike starts, in seconds. `random` returns 0..1 (Math.random, or a test's own). */
+    function strikeTimes(comp, o, random) {
+        var frameLen = 1 / comp.frameRate;
+        var strikeDur = o.duration * frameLen;
+        var gapDur = o.gap * frameLen;
+        var cursor = o.atTime ? comp.time : comp.workAreaStart;
+        var end = o.fillWA ? comp.workAreaStart + comp.workAreaDuration : Infinity;
+        var count = o.fillWA ? MAX_STRIKES : Math.min(MAX_STRIKES, Math.max(0, o.strikes));
+        var times = [];
+        // A millisecond of slack: 2 + 5 * 0.88 comes out as 6.3999999…, which
+        // would otherwise start one extra strike exactly at the end of the work area.
+        while (times.length < count && cursor < end - 0.001) {
+            times.push(Math.max(0, cursor + (random() - 0.5) * o.random * gapDur));
+            cursor += strikeDur + gapDur;
+        }
+        return times;
+    }
+
+    /** Peaks of an amplitude curve above `threshold`, at least `minGap` seconds apart. */
+    function audioPeaks(times, values, threshold, minGap) {
+        var peaks = [];
+        var last = -Infinity;
+        for (var i = 1; i < values.length - 1; i++) {
+            var v = values[i];
+            if (v < threshold || v <= values[i - 1] || v < values[i + 1]) continue;
+            if (times[i] - last < minGap) continue;
+            peaks.push({ time: times[i], value: v });
+            last = times[i];
+        }
+        return peaks;
+    }
+
+    /** Keyframes collected first and set in one call; a later key at the same time replaces an earlier one. */
+    function keyList() { return { times: [], values: [], at: {} }; }
+    function addKey(list, time, value) {
+        var t = Math.max(0, time);
+        var id = "t" + Math.round(t * 100000);
+        if (list.at.hasOwnProperty(id)) {
+            list.values[list.at[id]] = value;
+            return;
+        }
+        list.at[id] = list.times.length;
+        list.times.push(t);
+        list.values.push(value);
+    }
+    function applyKeys(prop, list) {
+        if (list.times.length) prop.setValuesAtTimes(list.times, list.values);
+    }
+
+    function rgba(rgb) { return [rgb[0], rgb[1], rgb[2], 1]; }
+
+    function newFlashSolid(comp, rgb, name, inPoint, outPoint) {
+        var layer = comp.layers.addSolid(rgb, name, comp.width, comp.height, comp.pixelAspect, comp.duration);
+        layer.blendingMode = BlendingMode.ADD;
+        layer.inPoint = inPoint;
+        layer.outPoint = outPoint;
+        return layer;
+    }
+
+    function precomposeCreated(comp, created, name, inPoint, outPoint) {
+        var indexes = [];
+        for (var k = 0; k < created.length; k++) indexes.push(created[k].index);
+        indexes.sort(function (a, b) { return a - b; });
+        var pc = comp.layers.precompose(indexes, name, true);
+        var outer = findLayerBySource(comp, pc);
+        if (outer) {
+            outer.inPoint = inPoint;
+            outer.outPoint = outPoint;
+            return [outer];
+        }
+        return [];
+    }
+
+    /**
+     * Build lightning in `comp` from the dialog's options `o`.
+     * Returns { layers, strikes } or { error } (nothing is created then).
+     */
+    function generateLightning(comp, o, random) {
+        random = random || Math.random;
+        if (o.makeAudio) return generateAudioFlash(comp, o);
+
+        var times = strikeTimes(comp, o, random);
+        if (!times.length) {
+            return { error: "No strikes fit between the playhead and the end of the work area.\nMove the playhead back, or turn off Start at CTI." };
+        }
+        var frameLen = 1 / comp.frameRate;
+        var strikeDur = o.duration * frameLen;
+        var first = Infinity;
+        var last = 0;
+        for (var i = 0; i < times.length; i++) {
+            first = Math.min(first, times[i]);
+            last = Math.max(last, times[i]);
+        }
+        if (first >= comp.duration) return { error: "The strikes would start after the end of the composition." };
+        var inPoint = Math.max(0, first - frameLen);
+        var outPoint = Math.min(comp.duration, last + strikeDur * (1 + o.random) + 0.1);
+
+        var created = [];
+        app.beginUndoGroup("LazyStrike FX: Generate Lightning");
+        try {
+            if (o.makeFlash) {
+                var flash = newFlashSolid(comp, o.flashColor, "LazyStrike Flash", inPoint, outPoint);
+                var fk = keyList();
+                addKey(fk, inPoint, 0);
+                for (var f = 0; f < times.length; f++) {
+                    var st = times[f];
+                    var dur = strikeDur * (1 - o.random * 0.25 * random());
+                    var peak = o.flashInt * 100 * (0.75 + random() * 0.25);
+                    addKey(fk, st, 0);
+                    addKey(fk, st + dur * 0.12, peak);
+                    addKey(fk, st + dur * 0.35, peak * 0.45);
+                    addKey(fk, st + dur * 0.55, peak * 0.85);
+                    addKey(fk, st + dur, 0);
+                }
+                applyKeys(opacityOf(flash), fk);
+                created.push(flash);
+            }
+
+            if (o.makeBolt) {
+                var bolt = newFlashSolid(comp, [0, 0, 0], "LazyStrike Bolt", inPoint, outPoint);
+                var fx = bolt.property("ADBE Effect Parade").addProperty(LIGHTNING.effect);
+                fx.property(LIGHTNING.type).setValue(1);
+                fx.property(LIGHTNING.origin).setValue([comp.width / 2, 0]);
+                fx.property(LIGHTNING.direction).setValue([comp.width / 2, comp.height * 0.85]);
+                fx.property(LIGHTNING.coreColor).setValue(rgba(o.boltColor));
+                fx.property(LIGHTNING.glowColor).setValue(rgba(o.boltColor));
+                // Percentages are stored as fractions: 0.4 is 40%.
+                fx.property(LIGHTNING.forking).setValue((40 + o.random * 40) / 100);
+                fx.property(LIGHTNING.decay).setValue(0.15);
+
+                var ck = keyList();
+                var dk = keyList();
+                var bk = keyList();
+                addKey(ck, inPoint, 0);
+                addKey(bk, inPoint, 0);
+                for (var b = 0; b < times.length; b++) {
+                    var bt = times[b];
+                    var bPeak = o.boltInt * 100;
+                    addKey(ck, bt, random() * 10);
+                    addKey(ck, bt + strikeDur * 0.33, random() * 10);
+                    addKey(ck, bt + strikeDur * 0.66, random() * 10);
+                    addKey(ck, bt + strikeDur, random() * 10);
+                    addKey(dk, bt, [comp.width / 2 + (random() - 0.5) * comp.width * o.random * 0.5, comp.height * 0.85]);
+                    addKey(bk, bt - frameLen * 0.5, 0);
+                    addKey(bk, bt, bPeak);
+                    addKey(bk, bt + strikeDur * 0.35, bPeak * 0.55);
+                    addKey(bk, bt + strikeDur * 0.65, bPeak * 0.9);
+                    addKey(bk, bt + strikeDur, 0);
+                }
+                applyKeys(fx.property(LIGHTNING.conductivity), ck);
+                applyKeys(fx.property(LIGHTNING.direction), dk);
+                applyKeys(opacityOf(bolt), bk);
+                created.push(bolt);
+            }
+
+            if (o.makeSky) {
+                var sky = newFlashSolid(comp, o.flashColor, "LazyStrike Sky Flash", inPoint, outPoint);
+                var sk = keyList();
+                addKey(sk, inPoint, 0);
+                for (var s = 0; s < times.length; s++) {
+                    var total = strikeDur * (1 + random() * o.random);
+                    var flicks = Math.max(1, o.flickers);
+                    if (o.random > 0.3) flicks = Math.max(1, flicks + Math.round((random() - 0.5) * 2));
+                    var flickWin = total / flicks;
+                    for (var n = 0; n < flicks; n++) {
+                        var fs = times[s] + n * flickWin + (random() - 0.5) * flickWin * 0.3 * o.random;
+                        var fPeak = o.flashInt * 100 * Math.pow(0.7, n) * (0.7 + random() * 0.3);
+                        var fDur = flickWin * (0.4 + random() * 0.3);
+                        addKey(sk, fs, 0);
+                        addKey(sk, fs + fDur * 0.15, fPeak);
+                        addKey(sk, fs + fDur * 0.5, fPeak * 0.3);
+                        addKey(sk, fs + fDur, 0);
+                    }
+                }
+                applyKeys(opacityOf(sky), sk);
+                created.push(sky);
+            }
+
+            if (o.preComp && created.length) {
+                created = precomposeCreated(comp, created, "LazyStrike Pre-comp", inPoint, outPoint);
+            }
+        } finally {
+            app.endUndoGroup();
+        }
+        return { layers: created, strikes: times.length };
+    }
+
+    /**
+     * Set the work area. After Effects adjusts start and duration against each
+     * other: from [0, 0.04 s], "start = 0.2" leaves start at 0 and stretches the
+     * duration (seen in After Effects 2026). Spanning the whole comp first makes
+     * both assignments land exactly.
+     */
+    function setWorkArea(comp, start, duration) {
+        comp.workAreaStart = 0;
+        comp.workAreaDuration = comp.duration;
+        comp.workAreaStart = start;
+        comp.workAreaDuration = duration;
+    }
+
+    function findAudioLayer(comp) {
+        var sel = comp.selectedLayers;
+        for (var s = 0; s < sel.length; s++) if (sel[s].hasAudio && !sel[s].hasVideo) return sel[s];
+        for (var s2 = 0; s2 < sel.length; s2++) if (sel[s2].hasAudio) return sel[s2];
+        for (var i = 1; i <= comp.numLayers; i++) {
+            var layer = comp.layer(i);
+            if (layer.hasAudio && !layer.hasVideo) return layer;
+        }
+        return null;
+    }
+
+    /**
+     * The "Both Channels" loudness of `audioLayer` over time, as { times, values },
+     * via Convert Audio to Keyframes. The temporary Audio Amplitude layer is
+     * removed again; the work area and the selection are put back. null when
+     * After Effects did not make the amplitude layer.
+     */
+    function audioAmplitude(comp, audioLayer) {
+        var commandId = app.findMenuCommandId("Convert Audio to Keyframes");
+        if (!commandId) commandId = CONVERT_AUDIO_COMMAND_ID;
+        var savedStart = comp.workAreaStart;
+        var savedDuration = comp.workAreaDuration;
+        var savedSelection = comp.selectedLayers;
+        var before = comp.numLayers;
+        var amp = null;
+        try {
+            var aStart = Math.max(0, Math.min(comp.duration - comp.frameDuration, audioLayer.inPoint));
+            var aEnd = Math.max(aStart + comp.frameDuration, Math.min(comp.duration, audioLayer.outPoint));
+            setWorkArea(comp, aStart, aEnd - aStart);
+            for (var i = 1; i <= comp.numLayers; i++) comp.layer(i).selected = false;
+            audioLayer.selected = true;
+            app.executeCommand(commandId);
+            if (comp.numLayers > before) amp = comp.layer(1);
+        } catch (eCmd) {
+            amp = null;
+        }
+
+        var result = null;
+        if (amp) {
+            var effects = amp.property("ADBE Effect Parade");
+            // Left, Right, Both Channels: the third slider, whatever its translated name.
+            if (effects && effects.numProperties >= 3 && effects.property(3).matchName === "ADBE Slider Control") {
+                var slider = effects.property(3).property(1);
+                result = { times: [], values: [] };
+                for (var k = 1; k <= slider.numKeys; k++) {
+                    result.times.push(slider.keyTime(k));
+                    result.values.push(slider.keyValue(k));
+                }
+                amp.remove(); // the flash gets keyframes of its own
+            }
+        }
+
+        try {
+            setWorkArea(comp, savedStart, savedDuration);
+        } catch (eWA) {}
+        try {
+            for (var d = 1; d <= comp.numLayers; d++) comp.layer(d).selected = false;
+            for (var r = 0; r < savedSelection.length; r++) savedSelection[r].selected = true;
+        } catch (eSel) {}
+        return result;
+    }
+
+    function generateAudioFlash(comp, o) {
+        var audioLayer = findAudioLayer(comp);
+        if (!audioLayer) return { error: "No audio layer found. Select one, or add audio to the composition." };
+
+        var created = [];
+        var peaks = [];
+        app.beginUndoGroup("LazyStrike FX: Audio-Driven Flash");
+        try {
+            var amp = audioAmplitude(comp, audioLayer);
+            if (!amp) return { error: "After Effects could not run Convert Audio to Keyframes on '" + audioLayer.name + "'." };
+            if (amp.values.length < 3) return { error: "The audio is too short to find peaks in." };
+
+            var frameLen = comp.frameDuration;
+            peaks = audioPeaks(amp.times, amp.values, o.threshold, o.minGapFr * frameLen);
+            if (!peaks.length) return { error: "No peaks above Threshold " + o.threshold + ". Lower the Threshold and try again." };
+
+            var flash = newFlashSolid(comp, o.flashColor, "LazyStrike Audio Flash", 0, comp.duration);
+            var maxOp = o.flashInt * 100;
+            var hold = Math.max(1, o.decayFr || 0) * frameLen;
+            var keys = keyList();
+            addKey(keys, 0, 0);
+            for (var p = 0; p < peaks.length; p++) {
+                var op = Math.min(maxOp, Math.max(0, (peaks[p].value - o.threshold) * o.gain));
+                if (op <= 0) continue;
+                var at = peaks[p].time;
+                var post = at + hold;
+                if (p < peaks.length - 1) {
+                    var nextPre = peaks[p + 1].time - frameLen * 0.5;
+                    if (nextPre < post) post = Math.max(at + frameLen * 0.5, nextPre);
+                }
+                addKey(keys, at - frameLen * 0.5, 0);
+                addKey(keys, at, op);
+                addKey(keys, post, 0);
+            }
+            applyKeys(opacityOf(flash), keys);
+            created.push(flash);
+            if (o.preComp) created = precomposeCreated(comp, created, "LazyStrike Audio Pre-comp", 0, comp.duration);
+        } finally {
+            app.endUndoGroup();
+        }
+        return { layers: created, strikes: peaks.length };
+    }
+
+    function strikeInput(parent, label, defaultVal, tip) {
+        var g = parent.add("group");
+        g.orientation = "row";
+        g.alignChildren = ["left", "center"];
+        g.alignment = ["fill", "top"];
+        var lbl = g.add("statictext", undefined, label);
+        lbl.preferredSize.width = 110;
+        var ed = g.add("edittext", undefined, defaultVal);
+        ed.characters = 4;
+        ed.alignment = ["right", "center"];
+        if (tip) ed.helpTip = tip;
+        return ed;
+    }
+
+    function strikeSlider(parent, label, defaultVal, minVal, maxVal, tip) {
+        var g = parent.add("group");
+        g.orientation = "row";
+        g.alignChildren = ["left", "center"];
+        g.alignment = ["fill", "top"];
+        var lbl = g.add("statictext", undefined, label);
+        lbl.preferredSize.width = 75;
+        var sl = g.add("slider", undefined, defaultVal, minVal, maxVal);
+        sl.alignment = ["fill", "center"];
+        var val = g.add("statictext", undefined, String(defaultVal));
+        val.characters = 3;
+        sl.onChanging = function () { val.text = Math.round(sl.value); };
+        if (tip) sl.helpTip = tip;
+        return sl;
+    }
+
+    function paintColorButton(btn, rgb) {
+        btn.onDraw = function () {
+            var g = btn.graphics;
+            g.newPath();
+            g.rectPath(0, 0, btn.size[0], btn.size[1]);
+            g.fillPath(g.newBrush(g.BrushType.SOLID_COLOR, [rgb[0], rgb[1], rgb[2], 1]));
+        };
+        btn.notify("onDraw");
+    }
+
+    function decToRgb(dec) {
+        return [((dec >> 16) & 0xFF) / 255, ((dec >> 8) & 0xFF) / 255, (dec & 0xFF) / 255];
+    }
+
+    function rgbToDec(rgb) {
+        return (Math.round(rgb[0] * 255) << 16) | (Math.round(rgb[1] * 255) << 8) | Math.round(rgb[2] * 255);
+    }
+
+    function showLazyStrikeDialog() {
+        if (strikeWindow) {
+            try {
+                strikeWindow.show();
+                return;
+            } catch (eShow) {
+                strikeWindow = null;
+            }
+        }
+
+        var win = new Window("palette", "LazyStrike FX", undefined, { resizeable: true });
+        win.orientation = "row";
+        win.alignChildren = ["fill", "top"];
+        win.spacing = 10;
+        win.margins = 10;
+
+        var col1 = win.add("group");
+        col1.orientation = "column";
+        col1.alignChildren = ["fill", "top"];
+        col1.spacing = 5;
+        var col2 = win.add("group");
+        col2.orientation = "column";
+        col2.alignChildren = ["fill", "top"];
+        col2.spacing = 5;
+
+        var pStyle = col1.add("panel", undefined, "Style");
+        pStyle.alignChildren = ["fill", "center"];
+        pStyle.margins = 10;
+        var ddStyle = pStyle.add("dropdownlist", undefined, ["Direct Bolt + Flash", "Sky Flash", "Both Combined", "Audio-Driven"]);
+        ddStyle.selection = 1;
+
+        var pColor = col1.add("panel", undefined, "Colors");
+        pColor.alignChildren = ["fill", "top"];
+        pColor.margins = 10;
+        var rowB = pColor.add("group");
+        rowB.add("statictext", undefined, "Bolt Color:");
+        var btnBoltColor = rowB.add("button", undefined, "");
+        btnBoltColor.preferredSize = [60, 20];
+        var rowF = pColor.add("group");
+        rowF.add("statictext", undefined, "Flash Color:");
+        var btnFlashColor = rowF.add("button", undefined, "");
+        btnFlashColor.preferredSize = [60, 20];
+
+        var pTime = col1.add("panel", undefined, "Timing");
+        pTime.alignChildren = ["fill", "top"];
+        pTime.margins = 10;
+        pTime.spacing = 5;
+        var inDur = strikeInput(pTime, "Strike Dur. (fr):", "10", "Length of one strike in frames");
+        var inStrikes = strikeInput(pTime, "Manual strikes:", "3", "How many strikes when Fill Work Area is off");
+        var inGap = strikeInput(pTime, "Gap (frames):", "12", "Frames between strikes");
+        var inFlicks = strikeInput(pTime, "Flickers/Sky:", "3", "Sky Flash: flickers per strike");
+
+        var pInt = col2.add("panel", undefined, "Intensity & Randomness");
+        pInt.alignChildren = ["fill", "top"];
+        pInt.margins = 10;
+        pInt.spacing = 5;
+        var sBolt = strikeSlider(pInt, "Bolt Int:", 75, 0, 100);
+        var sFlash = strikeSlider(pInt, "Flash Int:", 80, 0, 100);
+        var sRand = strikeSlider(pInt, "Random:", 50, 0, 100);
+
+        var pAudio = col2.add("panel", undefined, "Audio Sync");
+        pAudio.alignChildren = ["fill", "top"];
+        pAudio.margins = 10;
+        pAudio.spacing = 5;
+        var sThresh = strikeSlider(pAudio, "Threshold:", 10, 0, 100, "Audio-Driven: loudness a peak must pass");
+        var sGain = strikeSlider(pAudio, "Gain:", 12, 1, 25, "Audio-Driven: how bright a peak gets");
+        var sDecay = strikeSlider(pAudio, "Decay (fr):", 0, 0, 30, "Audio-Driven: frames each flash holds");
+        var sMinGap = strikeSlider(pAudio, "Min Gap:", 5, 0, 30, "Audio-Driven: frames between flashes");
+
+        var pOpt = col2.add("panel", undefined, "Options");
+        pOpt.alignChildren = ["left", "top"];
+        pOpt.margins = 10;
+        pOpt.spacing = 5;
+        var chkFillWA = pOpt.add("checkbox", undefined, "Fill Work Area");
+        chkFillWA.value = true;
+        var chkAtTime = pOpt.add("checkbox", undefined, "Start at CTI");
+        var chkPreComp = pOpt.add("checkbox", undefined, "Pre-compose");
+
+        var btnGo = col2.add("button", undefined, "⚡ Generate Lightning");
+        btnGo.preferredSize.height = 35;
+
+        paintColorButton(btnBoltColor, strikeColors.bolt);
+        paintColorButton(btnFlashColor, strikeColors.flash);
+        btnBoltColor.onClick = function () {
+            var c = $.colorPicker(rgbToDec(strikeColors.bolt));
+            if (c !== -1) {
+                strikeColors.bolt = decToRgb(c);
+                paintColorButton(btnBoltColor, strikeColors.bolt);
+            }
+        };
+        btnFlashColor.onClick = function () {
+            var c = $.colorPicker(rgbToDec(strikeColors.flash));
+            if (c !== -1) {
+                strikeColors.flash = decToRgb(c);
+                paintColorButton(btnFlashColor, strikeColors.flash);
+            }
+        };
+
+        btnGo.onClick = function () {
+            var comp = app.project.activeItem;
+            if (!(comp && comp instanceof CompItem)) {
+                alert("Please select or open a composition first.");
+                return;
+            }
+            var styleIdx = ddStyle.selection.index;
+            var result = generateLightning(comp, {
+                duration: Math.max(1, parseInt(inDur.text, 10) || 10),
+                strikes: Math.max(1, parseInt(inStrikes.text, 10) || 3),
+                gap: Math.max(0, parseInt(inGap.text, 10) || 12),
+                flickers: Math.max(1, parseInt(inFlicks.text, 10) || 3),
+                boltColor: strikeColors.bolt,
+                flashColor: strikeColors.flash,
+                boltInt: sBolt.value / 100,
+                flashInt: sFlash.value / 100,
+                random: sRand.value / 100,
+                threshold: sThresh.value,
+                gain: sGain.value,
+                decayFr: Math.round(sDecay.value),
+                minGapFr: Math.round(sMinGap.value),
+                makeBolt: styleIdx === 0 || styleIdx === 2,
+                makeFlash: styleIdx === 0 || styleIdx === 2,
+                makeSky: styleIdx === 1 || styleIdx === 2,
+                makeAudio: styleIdx === 3,
+                fillWA: chkFillWA.value,
+                atTime: chkAtTime.value,
+                preComp: chkPreComp.value
+            });
+            if (result.error) alert(result.error);
+        };
+
+        win.onClose = function () { strikeWindow = null; };
+        win.onResizing = win.onResize = function () { this.layout.resize(); };
+        win.center();
+        win.show();
+        strikeWindow = win;
+    }
+
+    // ============================================================
+    // 10. LazyPreview Render: render the work area to an H.264 file
+    //     in the background and play it back as a solo'd layer
+    //     (formerly the separate QuickPreviewRender script)
+    // ============================================================
+    var PREVIEW_PREFIX = "[PREVIEW]";
+    var PREVIEW_FOLDER = "AE_Previews";
+    var PREVIEW_BIN = "Lazy Preview Files";
+    var PREVIEW_BIN_OLD = "Quick Preview Files"; // made by QuickPreviewRender; reused if present
+    var PREVIEW_LABEL = 1; // red
+    var previewStatusText = null;
+
+    function setPreviewStatus(msg) {
+        try { if (previewStatusText) previewStatusText.text = msg; } catch (e) {}
+    }
+
+    function isWindowsOS() { return $.os.indexOf("Windows") !== -1; }
+
+    /** Full path to Windows PowerShell: After Effects' own PATH may not reach it. */
+    function powershellPath() {
+        try {
+            var p = $.getenv("SystemRoot") + "\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+            if (new File(p).exists) return p;
+        } catch (e) {}
+        return "powershell.exe";
+    }
+
+    function getAerenderPath() {
+        var bin = isWindowsOS() ? "aerender.exe" : "aerender";
+        var sep = isWindowsOS() ? "\\" : "/";
+        var candidates = [];
+        try {
+            if (app.path) candidates.push((app.path instanceof Folder ? app.path.fsName : String(app.path)) + sep + bin);
+        } catch (e1) {}
+        try {
+            if (Folder.startup && Folder.startup.fsName) candidates.push(Folder.startup.fsName + sep + bin);
+        } catch (e2) {}
+        for (var i = 0; i < candidates.length; i++) {
+            try {
+                if (new File(candidates[i]).exists) return candidates[i];
+            } catch (e3) {}
+        }
+        return null;
+    }
+
+    /** The H.264 output module template to render with (template names can be translated; "H.264" is not). */
+    function findH264Template(names) {
+        var fallback = null;
+        for (var i = 0; i < names.length; i++) {
+            if (String(names[i]).indexOf("H.264") !== 0) continue;
+            if (String(names[i]).indexOf("15 Mbps") !== -1) return names[i];
+            if (!fallback) fallback = names[i];
+        }
+        return fallback;
+    }
+
+    function outputTemplatesFor(comp) {
+        var item = app.project.renderQueue.items.add(comp);
+        try {
+            return item.outputModule(1).templates;
+        } finally {
+            item.remove();
+        }
+    }
+
+    function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+    /** A name no other preview has. It is also how Cancel finds this render's aerender. */
+    function previewStamp(date, rand) {
+        return "preview_" + date.getFullYear() + pad2(date.getMonth() + 1) + pad2(date.getDate()) + "_" +
+            pad2(date.getHours()) + pad2(date.getMinutes()) + pad2(date.getSeconds()) + "_" +
+            (1000 + Math.floor(rand * 9000));
+    }
+
+    function findPreviewLayer(comp) {
+        for (var i = 1; i <= comp.numLayers; i++) {
+            if (comp.layer(i).name.indexOf(PREVIEW_PREFIX) === 0) return comp.layer(i);
+        }
+        return null;
+    }
+
+    /** Only files LazyPreview made itself: preview_*.mp4 inside an AE_Previews folder. */
+    function isPreviewFile(file) {
+        try {
+            return !!file && !!file.parent && decodeURI(file.parent.name) === PREVIEW_FOLDER &&
+                /^preview_.*\.mp4$/i.test(decodeURI(file.name));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function previewBin() {
+        var root = app.project.rootFolder;
+        var old = null;
+        for (var i = 1; i <= root.numItems; i++) {
+            var it = root.item(i);
+            if (!(it instanceof FolderItem)) continue;
+            if (it.name === PREVIEW_BIN) return it;
+            if (it.name === PREVIEW_BIN_OLD) old = it;
+        }
+        return old || app.project.items.addFolder(PREVIEW_BIN);
+    }
+
+    var PENDING_DELETES_KEY = "PreviewFilesToDelete";
+
+    function pendingPreviewDeletes() {
+        try {
+            if (app.settings.haveSetting(_settingsSection, PENDING_DELETES_KEY)) {
+                var saved = app.settings.getSetting(_settingsSection, PENDING_DELETES_KEY);
+                return saved ? saved.split("\n") : [];
+            }
+        } catch (e) {}
+        return [];
+    }
+
+    /**
+     * Delete rendered preview files, including earlier ones still waiting.
+     * After Effects keeps an imported file open even after its footage item is
+     * removed (until its image cache is purged, which would also throw away the
+     * user's RAM previews), so a file it still holds is remembered and deleted
+     * on a later try: the next render, or the next time the panel opens.
+     * Returns how many are still waiting.
+     */
+    function deletePreviewFiles(newPath) {
+        var paths = pendingPreviewDeletes();
+        if (newPath) paths.push(newPath);
+        var waiting = [];
+        for (var i = 0; i < paths.length; i++) {
+            if (!paths[i]) continue;
+            var f = new File(paths[i]);
+            if (!f.exists || !isPreviewFile(f)) continue;
+            if (!f.remove()) waiting.push(paths[i]);
+        }
+        try { app.settings.saveSetting(_settingsSection, PENDING_DELETES_KEY, waiting.join("\n")); } catch (eSave) {}
+        return waiting.length;
+    }
+
+    /** Remove a comp's preview layer, its footage if nothing else uses it, and the file LazyPreview rendered. */
+    function removePreviewLayer(comp) {
+        var layer = findPreviewLayer(comp);
+        if (!layer) return false;
+        var source = layer.source;
+        layer.remove();
+        try {
+            if (source && source instanceof FootageItem && source.usedIn.length === 0) {
+                var file = source.file;
+                source.remove();
+                if (isPreviewFile(file)) deletePreviewFiles(file.fsName);
+            }
+        } catch (e) {}
+        return true;
+    }
+
+    /** Solo/enable the preview layer on or off. Returns the new state, or null when there is none. */
+    function togglePreviewLayer(comp) {
+        var layer = findPreviewLayer(comp);
+        if (!layer) return null;
+        var on = !layer.solo;
+        // After Effects refuses solo on a hidden layer: show before solo, unsolo before hiding.
+        if (on) {
+            layer.enabled = true;
+            layer.solo = true;
+        } else {
+            layer.solo = false;
+            layer.enabled = false;
+        }
+        return on;
+    }
+
+    function placePreview(comp, file, waStart, waDuration) {
+        var footage = app.project.importFile(new ImportOptions(file));
+        try { footage.parentFolder = previewBin(); } catch (eBin) {}
+        var layer = comp.layers.add(footage);
+        layer.startTime = waStart;
+        layer.inPoint = waStart;
+        layer.outPoint = waStart + waDuration;
+        layer.name = PREVIEW_PREFIX + " preview";
+        layer.enabled = true;
+        layer.solo = true;
+        try { layer.label = PREVIEW_LABEL; } catch (eLabel) {}
+        try { layer.moveToBeginning(); } catch (eMove) {}
+        return layer;
+    }
+
+    // PowerShell also treats typographic single quotes as quotes; doubling escapes each.
+    function psQuote(s) { return "'" + String(s).replace(/['‘’‚‛]/g, "$&$&") + "'"; }
+    function shQuote(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
+
+    var BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    /**
+     * Base64 of a string's UTF-16LE bytes, which is what powershell
+     * -EncodedCommand takes. ExtendScript hands system.callSystem its command
+     * line in the Windows ANSI code page, so a Bengali or Japanese folder name
+     * would arrive as "????"; an encoded command is plain ASCII.
+     */
+    function utf16leBase64(str) {
+        var bytes = [];
+        for (var i = 0; i < str.length; i++) {
+            var c = str.charCodeAt(i);
+            bytes.push(c & 255, (c >> 8) & 255);
+        }
+        var out = [];
+        for (var j = 0; j < bytes.length; j += 3) {
+            var b0 = bytes[j];
+            var b1 = j + 1 < bytes.length ? bytes[j + 1] : -1;
+            var b2 = j + 2 < bytes.length ? bytes[j + 2] : -1;
+            out.push(BASE64.charAt(b0 >> 2));
+            out.push(BASE64.charAt(((b0 & 3) << 4) | (b1 < 0 ? 0 : b1 >> 4)));
+            out.push(b1 < 0 ? "=" : BASE64.charAt(((b1 & 15) << 2) | (b2 < 0 ? 0 : b2 >> 6)));
+            out.push(b2 < 0 ? "=" : BASE64.charAt(b2 & 63));
+        }
+        return out.join("");
+    }
+
+    /**
+     * How aerender is run in the background. A script runs the render and then
+     * writes aerender's exit code to `marker`, so the panel knows when it has
+     * really finished; a cancel command stops only this render (found by the
+     * unique token in its output name). Returns { error } when the comp name
+     * can't be passed.
+     *
+     * Windows uses PowerShell, not a .bat file: cmd.exe misreads a batch file
+     * with non-ASCII paths after `chcp 65001` (seen in After Effects 2026).
+     */
+    function buildRenderJob(job) {
+        if (/["\r\n]/.test(job.compName)) {
+            return { error: "The composition name contains a double quote or a line break, which aerender can't be given.\nRename the composition and try again." };
+        }
+
+        if (job.windows) {
+            // aerender reads its command line in the ANSI code page: any other
+            // letter in a comp name arrives as "?" and matches no composition.
+            if (/[^\x20-\x7E]/.test(job.compName)) {
+                return { error: "aerender on Windows only accepts English letters, digits and symbols in the composition name.\nRename \"" + job.compName + "\" (for example to \"Main_Preview\") and render again." };
+            }
+            var ps1 = job.dir + "\\" + job.token + ".ps1";
+            var powershell = "\"" + (job.powershell || "powershell.exe") + "\"";
+            var runBody = [
+                "$exe = " + psQuote(job.aerender),
+                "$log = " + psQuote(job.log),
+                "$marker = " + psQuote(job.marker),
+                // The same goes for paths, so pass their short 8.3 forms, which are ASCII.
+                "$project = " + psQuote(job.project),
+                "$output = " + psQuote(job.output),
+                "try {",
+                "  $fso = New-Object -ComObject Scripting.FileSystemObject",
+                "  $project = $fso.GetFile($project).ShortPath",
+                "  $output = Join-Path $fso.GetFolder(" + psQuote(job.dir) + ").ShortPath " + psQuote(job.token + ".mp4"),
+                "} catch {}",
+                "if (($project + $output) -match '[^\\x00-\\x7F]') {",
+                "  'aerender cannot open a path with non-English letters, and this drive has no short (8.3) names to use instead. Move the project to a folder whose path uses only English letters, or render it from the Render Queue.' | Out-File -LiteralPath $log -Encoding utf8",
+                "  Set-Content -LiteralPath $marker -Value 'PATH' -Encoding ascii",
+                "  exit",
+                "}",
+                "$renderArgs = @('-project', $project, '-comp', " + psQuote(job.compName) + ", '-output', $output, '-OMtemplate', " +
+                    psQuote(job.template) + ", '-s', '" + job.startFrame + "', '-e', '" + job.endFrame + "')",
+                "& $exe @renderArgs 2>&1 | Out-File -LiteralPath $log -Encoding utf8",
+                "Set-Content -LiteralPath $marker -Value $LASTEXITCODE -Encoding ascii"
+            ].join("\n") + "\n";
+            // Start-Process in Windows PowerShell joins -ArgumentList unquoted, hence the inner quotes.
+            var launcher = "Start-Process -FilePath " + psQuote(job.powershell || "powershell.exe") +
+                " -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', " +
+                psQuote("\"" + ps1 + "\"") + ")";
+            var canceller = "Get-CimInstance Win32_Process -Filter \"Name='aerender.exe'\" | " +
+                "Where-Object { $_.CommandLine -like '*" + job.token + "*' } | " +
+                "ForEach-Object { taskkill /PID $_.ProcessId /T /F | Out-Null }";
+            // Started from After Effects, PowerShell only runs when cmd.exe starts
+            // it (called directly it exits at once), and `cmd /c start` can take
+            // a UI-less After Effects down. So cmd runs PowerShell, which hands the
+            // render to a hidden process of its own and returns.
+            var viaCmd = function (psArgs) { return "cmd /c \"" + powershell + " " + psArgs + "\""; };
+            return {
+                runFile: ps1,
+                runBody: runBody,
+                bom: true, // Windows PowerShell reads a .ps1 without a BOM as ANSI
+                lineFeed: "Windows",
+                launch: viaCmd("-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + utf16leBase64(launcher)),
+                runAndWait: viaCmd("-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + utf16leBase64("& " + psQuote(ps1))),
+                cancel: viaCmd("-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + utf16leBase64(canceller))
+            };
+        }
+
+        var renderArgs = ["-project", job.project, "-comp", job.compName, "-output", job.output,
+            "-OMtemplate", job.template, "-s", String(job.startFrame), "-e", String(job.endFrame)];
+        var sh = job.dir + "/" + job.token + ".sh";
+        var shArgs = [shQuote(job.aerender)];
+        for (var k = 0; k < renderArgs.length; k++) shArgs.push(shQuote(renderArgs[k]));
+        return {
+            runFile: sh,
+            runBody: "#!/bin/sh\n" + shArgs.join(" ") + " > " + shQuote(job.log) + " 2>&1\necho $? > " + shQuote(job.marker) + "\n",
+            bom: false,
+            lineFeed: "Unix",
+            launch: "nohup /bin/sh " + shQuote(sh) + " >/dev/null 2>&1 &",
+            runAndWait: "/bin/sh " + shQuote(sh),
+            cancel: "pkill -f " + shQuote(job.token)
+        };
+    }
+
+    /** A string's UTF-8 bytes, one character per byte, for writing in BINARY mode. */
+    function utf8Bytes(str) {
+        var out = [];
+        for (var i = 0; i < str.length; i++) {
+            var c = str.charCodeAt(i);
+            if (c >= 0xD800 && c <= 0xDBFF && i + 1 < str.length) {
+                var low = str.charCodeAt(i + 1);
+                if (low >= 0xDC00 && low <= 0xDFFF) {
+                    c = 0x10000 + ((c - 0xD800) << 10) + (low - 0xDC00);
+                    i++;
+                }
+            }
+            if (c < 0x80) {
+                out.push(String.fromCharCode(c));
+            } else if (c < 0x800) {
+                out.push(String.fromCharCode(0xC0 | (c >> 6), 0x80 | (c & 63)));
+            } else if (c < 0x10000) {
+                out.push(String.fromCharCode(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)));
+            } else {
+                out.push(String.fromCharCode(0xF0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)));
+            }
+        }
+        return out.join("");
+    }
+
+    /**
+     * Write text as UTF-8 with the given line endings, optionally with a BOM.
+     * The bytes are built here and written in BINARY mode: in UTF-8 mode After
+     * Effects drops a BOM, even one written separately, and Windows PowerShell
+     * then reads the script as ANSI and mangles non-ASCII paths in it.
+     */
+    function writeTextFile(path, body, bom, lineFeed) {
+        var text = String(body).replace(/\r\n/g, "\n");
+        if (lineFeed === "Windows") text = text.replace(/\n/g, "\r\n");
+        var f = new File(path);
+        f.encoding = "BINARY";
+        f.lineFeed = "Unix"; // no translation: the line endings are already in `text`
+        if (!f.open("w")) throw new Error("Could not write " + path);
+        f.write((bom ? "ï»¿" : "") + utf8Bytes(text));
+        f.close();
+        return f;
+    }
+
+    function removeQuietly(path) {
+        try {
+            var f = new File(path);
+            if (f.exists) f.remove();
+        } catch (e) {}
+    }
+
+    function readTail(path, chars) {
+        try {
+            var f = new File(path);
+            if (!f.exists) return "";
+            f.encoding = "UTF-8";
+            f.open("r");
+            var text = f.read();
+            f.close();
+            return text.length > chars ? text.substring(text.length - chars) : text;
+        } catch (e) {
+            return "";
+        }
+    }
+
+    /** Called every second by app.scheduleTask while a render runs. */
+    function previewCheck() {
+        var s = $.global.LazyPreviewRender;
+        if (!s || !s.busy) return;
+        var elapsed = Math.round((new Date().getTime() - s.startedAt) / 1000);
+        var marker = new File(s.marker);
+        if (!marker.exists) {
+            var gaveUp = s.cancelled && new Date().getTime() - s.cancelledAt > 15000;
+            if (!gaveUp) {
+                try { s.label.text = (s.cancelled ? "Cancelling… " : "Rendering… ") + elapsed + " s"; } catch (eLabel) {}
+                setPreviewStatus((s.cancelled ? "Cancelling… " : "Rendering in background… ") + elapsed + " s");
+                return;
+            }
+        }
+        var code = "";
+        if (marker.exists) {
+            marker.open("r");
+            code = marker.read().replace(/\s+/g, "");
+            marker.close();
+        }
+        previewFinish(code);
+    }
+
+    function previewFinish(code) {
+        var s = $.global.LazyPreviewRender;
+        s.busy = false;
+        if (s.taskId !== null) { try { app.cancelTask(s.taskId); } catch (eTask) {} }
+        try { s.dialog.close(); } catch (eDlg) {}
+        removeQuietly(s.marker);
+        removeQuietly(s.runFile);
+
+        var output = new File(s.output);
+        if (s.cancelled) {
+            removeQuietly(s.output);
+            removeQuietly(s.log);
+            setPreviewStatus("Cancelled.");
+            return;
+        }
+        if (code === "PATH") {
+            setPreviewStatus("Render not possible from this folder.");
+            alert(readTail(s.log, 800));
+            return;
+        }
+        if (code !== "0" || !output.exists) {
+            setPreviewStatus("Render failed.");
+            alert("aerender did not finish the preview (exit code " + (code || "unknown") + ").\n\nEnd of the log:\n" + readTail(s.log, 800));
+            return;
+        }
+
+        var comp = null;
+        for (var i = 1; i <= app.project.numItems; i++) {
+            var it = app.project.item(i);
+            if (it instanceof CompItem && it.id === s.compId) comp = it;
+        }
+        if (!comp) {
+            setPreviewStatus("Comp not found.");
+            alert("The composition was not found any more.\nThe preview is saved at:\n" + output.fsName);
+            return;
+        }
+        app.beginUndoGroup("LazyPreview Render: Add Preview");
+        try {
+            placePreview(comp, output, s.waStart, s.waDuration);
+        } finally {
+            app.endUndoGroup();
+        }
+        removeQuietly(s.log);
+        setPreviewStatus("✓ Preview ready. Toggle to compare with the comp.");
+    }
+
+    function previewCancel() {
+        var s = $.global.LazyPreviewRender;
+        if (!s || !s.busy || s.cancelled) return;
+        s.cancelled = true;
+        s.cancelledAt = new Date().getTime();
+        try { system.callSystem(s.cancel); } catch (e) {}
+        setPreviewStatus("Cancelling…");
+    }
+
+    function countCompsNamed(name) {
+        var n = 0;
+        for (var i = 1; i <= app.project.numItems; i++) {
+            var it = app.project.item(i);
+            if (it instanceof CompItem && it.name === name) n++;
+        }
+        return n;
+    }
+
+    /** Start rendering `comp`'s work area. Returns "" or why it could not start. */
+    function startPreviewRender(comp) {
+        deletePreviewFiles(null);
+        if (!(comp && comp instanceof CompItem)) return "Please select or open a composition first.";
+        if (comp.workAreaDuration <= 0) return "The work area is empty.\nSet it first (B = in, N = out).";
+        if (!app.project.file) return "Save your project first: aerender renders the saved .aep file.";
+        var running = $.global.LazyPreviewRender;
+        if (running && running.busy) return "A preview render is already running.";
+        var aerender = getAerenderPath();
+        if (!aerender) return "aerender was not found next to After Effects.";
+        if (countCompsNamed(comp.name) > 1) {
+            return "Another composition is also named \"" + comp.name + "\".\naerender picks compositions by name, so rename one of them first.";
+        }
+        var template = findH264Template(outputTemplatesFor(comp));
+        if (!template) return "No H.264 output module template was found (After Effects 2023 or newer is needed).";
+
+        app.beginUndoGroup("LazyPreview Render: Prepare");
+        try {
+            removePreviewLayer(comp);
+        } finally {
+            app.endUndoGroup();
+        }
+        try {
+            app.project.save();
+        } catch (eSave) {
+            return "Could not save the project: " + eSave.toString();
+        }
+
+        var folder = new Folder(app.project.file.parent.fsName + "/" + PREVIEW_FOLDER);
+        if (!folder.exists) folder.create();
+        var token = previewStamp(new Date(), Math.random());
+        var windows = isWindowsOS();
+        var sep = windows ? "\\" : "/";
+        var fps = comp.frameRate;
+        var startFrame = Math.round(comp.workAreaStart * fps);
+        var job = buildRenderJob({
+            windows: windows,
+            powershell: windows ? powershellPath() : null,
+            dir: folder.fsName,
+            token: token,
+            aerender: aerender,
+            project: app.project.file.fsName,
+            compName: comp.name,
+            output: folder.fsName + sep + token + ".mp4",
+            log: folder.fsName + sep + token + "-log.txt",
+            marker: folder.fsName + sep + token + ".done",
+            template: template,
+            startFrame: startFrame,
+            endFrame: startFrame + Math.round(comp.workAreaDuration * fps) - 1
+        });
+        if (job.error) return job.error;
+        writeTextFile(job.runFile, job.runBody, job.bom, job.lineFeed);
+
+        var dlg = new Window("palette", "LazyPreview Render", undefined);
+        dlg.orientation = "column";
+        dlg.alignChildren = ["fill", "center"];
+        dlg.margins = 18;
+        dlg.add("statictext", undefined, "Rendering the work area in the background…").alignment = "center";
+        dlg.add("statictext", undefined, "Comp: " + comp.name).alignment = "center";
+        var label = dlg.add("statictext", undefined, "Starting…");
+        label.preferredSize.width = 320;
+        label.alignment = "center";
+        var cancelBtn = dlg.add("button", undefined, "Cancel");
+        cancelBtn.onClick = previewCancel;
+
+        $.global.LazyPreviewRender = {
+            busy: true,
+            cancelled: false,
+            cancelledAt: 0,
+            startedAt: new Date().getTime(),
+            compId: comp.id,
+            waStart: comp.workAreaStart,
+            waDuration: comp.workAreaDuration,
+            output: folder.fsName + sep + token + ".mp4",
+            log: folder.fsName + sep + token + "-log.txt",
+            marker: folder.fsName + sep + token + ".done",
+            runFile: job.runFile,
+            cancel: job.cancel,
+            dialog: dlg,
+            label: label,
+            taskId: null,
+            check: previewCheck
+        };
+
+        try {
+            system.callSystem(job.launch);
+        } catch (eLaunch) {
+            $.global.LazyPreviewRender.busy = false;
+            return "Could not start aerender: " + eLaunch.toString();
+        }
+        dlg.show();
+        $.global.LazyPreviewRender.taskId = app.scheduleTask("$.global.LazyPreviewRender.check();", 1000, true);
+        setPreviewStatus("Rendering in background…");
+        return "";
+    }
+
+    // ============================================================
+    // 11. Main ScriptUI Window / Panel Builder
     // ============================================================
     function buildToolkitUI(thisObj) {
         var win = (thisObj instanceof Panel)
@@ -1551,6 +2614,65 @@
         var btnGrid = boxGridRow.add("button", undefined, "⊞ Grid Maker");
         btnGrid.helpTip = "Open Grid Designer to create Rows, Columns, and Layouts";
         btnGrid.onClick = showGridMakerDialog;
+
+        var btnStrike = toolsPnl.add("button", undefined, "⚡ LazyStrike FX");
+        btnStrike.helpTip = "Lightning bolts, flashes and sky flashes — by timing or driven by audio";
+        btnStrike.onClick = showLazyStrikeDialog;
+
+        // ---- LazyPreview Render ----
+        var previewPnl = win.add("panel", undefined, "🎬 LazyPreview Render");
+        previewPnl.orientation = "column";
+        previewPnl.alignChildren = ["fill", "top"];
+        previewPnl.spacing = 6;
+        previewPnl.margins = [8, 10, 8, 8];
+
+        var previewRow = previewPnl.add("group");
+        previewRow.orientation = "row";
+        previewRow.alignChildren = ["fill", "center"];
+        previewRow.spacing = 6;
+        var btnRender = previewRow.add("button", undefined, "▶ Render In→Out");
+        btnRender.helpTip = "Saves the project, renders the work area (B / N) to H.264 in the background, and puts it on top as a solo'd preview layer for smooth playback";
+        var btnTogglePreview = previewRow.add("button", undefined, "Toggle");
+        btnTogglePreview.helpTip = "Switch between the rendered preview and the live composition";
+        var btnRemovePreview = previewRow.add("button", undefined, "Remove");
+        btnRemovePreview.helpTip = "Delete the preview layer and its rendered file";
+        previewStatusText = previewPnl.add("statictext", undefined, "Set the work area (B / N), then render.");
+        previewStatusText.alignment = ["fill", "top"];
+        try { deletePreviewFiles(null); } catch (ePending) {} // files After Effects let go of since last time
+
+        btnRender.onClick = function () {
+            var problem = startPreviewRender(app.project.activeItem);
+            if (problem) {
+                setPreviewStatus("Not started.");
+                alert(problem);
+            }
+        };
+        btnTogglePreview.onClick = function () {
+            var comp = app.project.activeItem;
+            if (!(comp && comp instanceof CompItem)) return alert("No active composition.");
+            app.beginUndoGroup("LazyPreview Render: Toggle Preview");
+            var on;
+            try {
+                on = togglePreviewLayer(comp);
+            } finally {
+                app.endUndoGroup();
+            }
+            if (on === null) return alert("No preview layer in this composition.\nClick Render In→Out first.");
+            setPreviewStatus(on ? "✓ Preview ON" : "○ Preview OFF (showing the composition)");
+        };
+        btnRemovePreview.onClick = function () {
+            var comp = app.project.activeItem;
+            if (!(comp && comp instanceof CompItem)) return alert("No active composition.");
+            app.beginUndoGroup("LazyPreview Render: Remove Preview");
+            var removed;
+            try {
+                removed = removePreviewLayer(comp);
+            } finally {
+                app.endUndoGroup();
+            }
+            if (!removed) return alert("No preview layer to remove.");
+            setPreviewStatus("Preview removed.");
+        };
 
         // ---- 2. Head to Line (Animated Arrows) Panel ----
         var headPnl = win.add("panel", undefined, "🏹 Head to Line");
@@ -1873,7 +2995,30 @@
             centerInComp: centerInComp,
             alignAnchors: alignAnchors,
             centerLayers: centerLayers,
-            computeGrid: computeGrid
+            computeGrid: computeGrid,
+            LIGHTNING: LIGHTNING,
+            strikeTimes: strikeTimes,
+            audioPeaks: audioPeaks,
+            generateLightning: generateLightning,
+            findH264Template: findH264Template,
+            previewStamp: previewStamp,
+            isPreviewFile: isPreviewFile,
+            buildRenderJob: buildRenderJob,
+            utf16leBase64: utf16leBase64,
+            utf8Bytes: utf8Bytes,
+            writeTextFile: writeTextFile,
+            placePreview: placePreview,
+            findPreviewLayer: findPreviewLayer,
+            togglePreviewLayer: togglePreviewLayer,
+            removePreviewLayer: removePreviewLayer,
+            deletePreviewFiles: deletePreviewFiles,
+            pendingPreviewDeletes: pendingPreviewDeletes,
+            getAerenderPath: getAerenderPath,
+            powershellPath: powershellPath,
+            buildToolkitUI: buildToolkitUI,
+            showLazyStrikeDialog: showLazyStrikeDialog,
+            closeLazyStrikeDialog: function () { if (strikeWindow) strikeWindow.close(); },
+            outputTemplatesFor: outputTemplatesFor
         };
         return null;
     }

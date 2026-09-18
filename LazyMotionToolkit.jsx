@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.8";
+    var _buildVersion     = "1.8.9";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2773,6 +2773,8 @@
             div2.alignment = ["fill", "center"];
             div2.maximumSize.height = 1;
 
+            hdrRow.leftHdr = leftHdr;
+            hdrRow.rightHdr = rightHdr;
             return hdrRow;
         }
 
@@ -2935,7 +2937,7 @@
         // ============================================================
         // ---- 3. Head to Line & Anchor (Two Columns) ----
         // ============================================================
-        addSharedHeader(win, "Head to Line", "Anchor");
+        var hdr1 = addSharedHeader(win, "Head to Line", "Anchor");
 
         var twoCol1 = win.add("group");
         twoCol1.orientation = "row";
@@ -2981,6 +2983,7 @@
 
         var btnHeadIt = headCol.add("iconbutton", undefined, undefined);
         styleBtn(btnHeadIt, "⚙ Head it!", "default", 30);
+        btnHeadIt.preferredSize.width = 10;
         btnHeadIt.alignment = ["fill", "center"];
         btnHeadIt.helpTip = "Attach selected Head shape to line with path tracking & animation";
         btnHeadIt.onClick = function () {
@@ -3044,6 +3047,7 @@
 
         var btnCenterComp = anchorCol.add("iconbutton", undefined, undefined);
         styleBtn(btnCenterComp, "Center Comp", "default", 30);
+        btnCenterComp.preferredSize.width = 10;
         btnCenterComp.alignment = ["fill", "center"];
         btnCenterComp.helpTip = "Center selected layers in composition";
         btnCenterComp.onClick = centerInComp;
@@ -3051,7 +3055,7 @@
         // ============================================================
         // ---- 4. Fade & Swatch (Two Columns) ----
         // ============================================================
-        addSharedHeader(win, "Fade", "Swatch");
+        var hdr2 = addSharedHeader(win, "Fade", "Swatch");
 
         var twoCol2 = win.add("group");
         twoCol2.orientation = "row";
@@ -3143,6 +3147,7 @@
         var swCtrlRow = swatchCol.add("group");
         swCtrlRow.orientation = "row";
         swCtrlRow.alignChildren = ["left", "center"];
+        swCtrlRow.alignment = ["left", "top"];
         swCtrlRow.spacing = 4;
 
         var totLbl = swCtrlRow.add("statictext", undefined, "Tot:");
@@ -3161,7 +3166,8 @@
 
         var swContainer = swatchCol.add("group");
         swContainer.orientation = "column";
-        swContainer.alignChildren = ["center", "top"];
+        swContainer.alignChildren = ["left", "top"];
+        swContainer.alignment = ["left", "top"];
         swContainer.spacing = 3;
 
         var activeSwatchIdx = 0;
@@ -3179,6 +3185,7 @@
                     curRowGrp = swContainer.add("group");
                     curRowGrp.orientation = "row";
                     curRowGrp.alignChildren = ["left", "top"];
+                    curRowGrp.alignment = ["left", "top"];
                     curRowGrp.spacing = 3;
                 }
 
@@ -3278,13 +3285,43 @@
         footer.alignment = ["center", "bottom"];
         try { footer.graphics.foregroundColor = win.graphics.newPen(win.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (eF) {}
 
-        win.onResizing = win.onResize = function () { this.layout.resize(); };
+        function syncTwoColumnWidths() {
+            var curW = 0;
+            if (win.size && win.size[0] > 0) {
+                curW = win.size[0];
+            } else if (win.preferredSize && win.preferredSize[0] > 0) {
+                curW = win.preferredSize[0];
+            }
+            if (curW <= 0) curW = 400;
+
+            // 24 = margins (12 left + 12 right), 4 = spacing between the two columns
+            var colW = Math.floor((curW - 24 - 4) / 2);
+            if (colW < 140) colW = 140;
+
+            if (hdr1 && hdr1.leftHdr) hdr1.leftHdr.preferredSize.width = colW;
+            if (hdr1 && hdr1.rightHdr) hdr1.rightHdr.preferredSize.width = colW;
+            if (headCol) headCol.preferredSize.width = colW;
+            if (anchorCol) anchorCol.preferredSize.width = colW;
+
+            if (hdr2 && hdr2.leftHdr) hdr2.leftHdr.preferredSize.width = colW;
+            if (hdr2 && hdr2.rightHdr) hdr2.rightHdr.preferredSize.width = colW;
+            if (fadeCol) fadeCol.preferredSize.width = colW;
+            if (swatchCol) swatchCol.preferredSize.width = colW;
+        }
+
+        win.onResizing = win.onResize = function () {
+            syncTwoColumnWidths();
+            this.layout.resize();
+        };
 
         if (win instanceof Window) {
             win.center();
             win.show();
+            syncTwoColumnWidths();
+            win.layout.resize();
         } else {
             win.layout.layout(true);
+            syncTwoColumnWidths();
             win.layout.resize();
         }
 

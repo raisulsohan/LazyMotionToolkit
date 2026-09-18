@@ -2,6 +2,12 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.9
+
+### 📐 Dynamic 50/50 Column Symmetry & Left-Aligned Swatches
+- **Exact Center Alignment (`syncTwoColumnWidths`):** Dynamically synchronizes column widths across `Head to Line`, `Anchor`, `Fade`, and `Swatch` to exactly match half of the content width. The gap between `Head it!` and `Center Comp` now sits on the exact same vertical center axis as the Motion Tools buttons above.
+- **Header & Swatch Alignment:** Left-aligned `SWATCH` header, `Tot:` controls, and the color swatch grid blocks so they align seamlessly along the center divider line, eliminating unwanted horizontal offset.
+
 ## 1.8.8
 
 ### 📐 Balanced Button Heights & Spacing Polish

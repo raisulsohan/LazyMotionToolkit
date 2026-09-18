@@ -2,6 +2,12 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.6
+
+### 📐 Layout Alignment Fix
+- **Bottom-Aligned Two-Column Grid:** Switched from `top` alignment to `bottom` alignment on all two-column row containers (`Head to Line / Anchor` and `Fade / Swatch`), matching the Figma `grid grid-cols-2 items-end` behavior. This ensures the bottom action buttons ("Head it!" ↔ "Center Comp", "Apply" ↔ swatch row) always sit on the exact same horizontal baseline regardless of differing content heights above them.
+- **Removed Fixed Width/Height Hacks:** Eliminated `preferredSize.width = 155` and `preferredSize.height` wrappers that were fighting ScriptUI's native `fill` distribution. Now both columns grow equally to fill the available panel width.
+
 ## 1.8.5
 
 ### 📏 Layout Alignment Perfected

@@ -20,7 +20,7 @@
   <a href="#-author--credits">Credits</a>
 </p>
 
-Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.8.5** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.8.6** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
 
 ---
 

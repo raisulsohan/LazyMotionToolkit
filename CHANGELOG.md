@@ -2,6 +2,12 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.8
+
+### 📐 Balanced Button Heights & Spacing Polish
+- **Equal Touch Targets (30px Heights):** Standardized button heights across Motion Tools, Preview Render, Head to Line, Anchor, and Fade action rows to a comfortable 30px (and 32px for LazyStrike FX).
+- **Even Multi-Column Spacing:** Set column and header spacing consistently to 4px with `preferredSize.width = 10` across rows, ensuring seamless 50/50 and 33/33/33 distribution without clipping on narrow docked panels.
+
 ## 1.8.7
 
 ### 📐 Equal-Width Column Split

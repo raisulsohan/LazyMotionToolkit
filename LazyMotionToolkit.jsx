@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.7";
+    var _buildVersion     = "1.8.8";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2572,7 +2572,10 @@
 
         win.orientation = "column";
         win.alignChildren = ["fill", "top"];
-        win.spacing = 8;
+        // Keep the reference layout airy, but never force a fixed width: docked
+        // ScriptUI panels are allowed to be narrower than the floating palette.
+        // A fixed minimum width makes AE crop the right side instead of flowing.
+        win.spacing = 10;
         win.margins = [12, 12, 12, 12];
 
         // ---- Theme Colors (matches src/index.css) ----
@@ -2616,7 +2619,7 @@
         /** Applies Figma-styled custom vector rendering to a button. */
         function styleBtn(btn, text, variant, customH) {
             btn.text = text;
-            var h = customH || 24;
+            var h = customH || 28;
             btn.preferredSize.height = h;
 
             btn.onDraw = function () {
@@ -2735,7 +2738,7 @@
             var hdrRow = rowGrp.add("group");
             hdrRow.orientation = "row";
             hdrRow.alignChildren = ["fill", "center"];
-            hdrRow.spacing = 10;
+            hdrRow.spacing = 4;
             hdrRow.margins = [0, 4, 0, 2];
 
             // Left Header
@@ -2823,13 +2826,15 @@
         tRow1.alignChildren = ["fill", "center"];
         tRow1.spacing = 4;
         var btnPrecompIndiv = tRow1.add("iconbutton", undefined, undefined);
-        styleBtn(btnPrecompIndiv, "⊞ Precomp (1:1)", "default", 24);
+        styleBtn(btnPrecompIndiv, "⊞ Precomp (1:1)", "default", 30);
+        btnPrecompIndiv.preferredSize.width = 10;
         btnPrecompIndiv.alignment = ["fill", "center"];
         btnPrecompIndiv.helpTip = "Smart Crop & Precompose Each Selected Layer Separately";
         btnPrecompIndiv.onClick = executeIndividualPrecomp;
 
         var btnPrecompGroup = tRow1.add("iconbutton", undefined, undefined);
-        styleBtn(btnPrecompGroup, "▣ Precomp (Group)", "default", 24);
+        styleBtn(btnPrecompGroup, "▣ Precomp (Group)", "default", 30);
+        btnPrecompGroup.preferredSize.width = 10;
         btnPrecompGroup.alignment = ["fill", "center"];
         btnPrecompGroup.helpTip = "Precompose All Selected Layers Combined into ONE Single Precomp";
         btnPrecompGroup.onClick = executeGroupPrecomp;
@@ -2839,19 +2844,21 @@
         tRow2.alignChildren = ["fill", "center"];
         tRow2.spacing = 4;
         var btnAutoBox = tRow2.add("iconbutton", undefined, undefined);
-        styleBtn(btnAutoBox, "⊡ Auto Box", "default", 24);
+        styleBtn(btnAutoBox, "⊡ Auto Box", "default", 30);
+        btnAutoBox.preferredSize.width = 10;
         btnAutoBox.alignment = ["fill", "center"];
         btnAutoBox.helpTip = "Create Pixel-Perfect Auto-Resizing Background Box for Text Layer";
         btnAutoBox.onClick = executeAutoBoxMaker;
 
         var btnGrid = tRow2.add("iconbutton", undefined, undefined);
-        styleBtn(btnGrid, "⊞ Grid Maker", "default", 24);
+        styleBtn(btnGrid, "⊞ Grid Maker", "default", 30);
+        btnGrid.preferredSize.width = 10;
         btnGrid.alignment = ["fill", "center"];
         btnGrid.helpTip = "Open Grid Designer to create Rows, Columns, and Layouts";
         btnGrid.onClick = showGridMakerDialog;
 
         var btnStrike = toolsGrid.add("iconbutton", undefined, undefined);
-        styleBtn(btnStrike, "⚡ LazyStrike FX", "primary", 26);
+        styleBtn(btnStrike, "⚡ LazyStrike FX", "primary", 32);
         btnStrike.alignment = ["fill", "center"];
         btnStrike.helpTip = "Lightning bolts, flashes and sky flashes — by timing or driven by audio";
         btnStrike.onClick = showLazyStrikeDialog;
@@ -2868,17 +2875,20 @@
         prevRow.spacing = 4;
 
         var btnRender = prevRow.add("iconbutton", undefined, undefined);
-        styleBtn(btnRender, "▶ Render In→Out", "default", 24);
+        styleBtn(btnRender, "▶ Render In→Out", "default", 30);
+        btnRender.preferredSize.width = 10;
         btnRender.alignment = ["fill", "center"];
         btnRender.helpTip = "Saves the project, renders the work area (B / N) to H.264 in the background, and puts it on top as a solo'd preview layer for smooth playback";
 
         var btnTogglePreview = prevRow.add("iconbutton", undefined, undefined);
-        styleBtn(btnTogglePreview, "Toggle", "default", 24);
+        styleBtn(btnTogglePreview, "Toggle", "default", 30);
+        btnTogglePreview.preferredSize.width = 10;
         btnTogglePreview.alignment = ["fill", "center"];
         btnTogglePreview.helpTip = "Switch between the rendered preview and the live composition";
 
         var btnRemovePreview = prevRow.add("iconbutton", undefined, undefined);
-        styleBtn(btnRemovePreview, "Remove", "danger", 24);
+        styleBtn(btnRemovePreview, "Remove", "danger", 30);
+        btnRemovePreview.preferredSize.width = 10;
         btnRemovePreview.alignment = ["fill", "center"];
         btnRemovePreview.helpTip = "Delete the preview layer and its rendered file";
 
@@ -2930,7 +2940,7 @@
         var twoCol1 = win.add("group");
         twoCol1.orientation = "row";
         twoCol1.alignChildren = ["fill", "bottom"];
-        twoCol1.spacing = 10;
+        twoCol1.spacing = 4;
 
         // -- Left: Head to Line Form --
         var headCol = twoCol1.add("group");
@@ -2970,7 +2980,7 @@
         inputAnimFrames.characters = 3;
 
         var btnHeadIt = headCol.add("iconbutton", undefined, undefined);
-        styleBtn(btnHeadIt, "⚙ Head it!", "default", 22);
+        styleBtn(btnHeadIt, "⚙ Head it!", "default", 30);
         btnHeadIt.alignment = ["fill", "center"];
         btnHeadIt.helpTip = "Attach selected Head shape to line with path tracking & animation";
         btnHeadIt.onClick = function () {
@@ -3033,7 +3043,7 @@
         }
 
         var btnCenterComp = anchorCol.add("iconbutton", undefined, undefined);
-        styleBtn(btnCenterComp, "Center Comp", "default", 22);
+        styleBtn(btnCenterComp, "Center Comp", "default", 30);
         btnCenterComp.alignment = ["fill", "center"];
         btnCenterComp.helpTip = "Center selected layers in composition";
         btnCenterComp.onClick = centerInComp;
@@ -3046,7 +3056,7 @@
         var twoCol2 = win.add("group");
         twoCol2.orientation = "row";
         twoCol2.alignChildren = ["fill", "bottom"];
-        twoCol2.spacing = 10;
+        twoCol2.spacing = 4;
 
         // -- Left: Fade Form --
         var fadeCol = twoCol2.add("group");
@@ -3102,7 +3112,8 @@
         fActionsRow.spacing = 4;
 
         var btnApplyFade = fActionsRow.add("iconbutton", undefined, undefined);
-        styleBtn(btnApplyFade, "⚡ Apply", "primary", 22);
+        styleBtn(btnApplyFade, "⚡ Apply", "primary", 30);
+        btnApplyFade.preferredSize.width = 10;
         btnApplyFade.alignment = ["fill", "center"];
         btnApplyFade.onClick = function () {
             var dur = parseInt(inputFadeDur.text, 10);
@@ -3115,7 +3126,8 @@
         };
 
         var btnDeleteFade = fActionsRow.add("iconbutton", undefined, undefined);
-        styleBtn(btnDeleteFade, "✕ Clear", "default", 22);
+        styleBtn(btnDeleteFade, "✕ Clear", "default", 30);
+        btnDeleteFade.preferredSize.width = 10;
         btnDeleteFade.alignment = ["fill", "center"];
         btnDeleteFade.helpTip = "Remove LazyMotion fades and markers";
         btnDeleteFade.onClick = deleteFadeTools;

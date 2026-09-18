@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.1";
+    var _buildVersion     = "1.8.2";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2572,8 +2572,8 @@
 
         win.orientation = "column";
         win.alignChildren = ["fill", "top"];
-        win.spacing = 6;
-        win.margins = [10, 10, 10, 10];
+        win.spacing = 8;
+        win.margins = [12, 12, 12, 12];
 
         // ---- Theme Colors (matches src/index.css) ----
         var C = {
@@ -2597,6 +2597,18 @@
 
         // ---- UI Drawing Helpers ----
 
+        function fillRoundRect(g, brush, x, y, w, h, r) {
+            if (r <= 0) {
+                g.newPath(); g.rectPath(x, y, w, h); g.fillPath(brush); return;
+            }
+            g.newPath(); g.ellipsePath(x, y, r*2, r*2); g.fillPath(brush);
+            g.newPath(); g.ellipsePath(x+w-r*2, y, r*2, r*2); g.fillPath(brush);
+            g.newPath(); g.ellipsePath(x, y+h-r*2, r*2, r*2); g.fillPath(brush);
+            g.newPath(); g.ellipsePath(x+w-r*2, y+h-r*2, r*2, r*2); g.fillPath(brush);
+            g.newPath(); g.rectPath(x+r, y, w-r*2, h); g.fillPath(brush);
+            g.newPath(); g.rectPath(x, y+r, w, h-r*2); g.fillPath(brush);
+        }
+
         /** Applies Figma-styled custom vector rendering to a button. */
         function styleBtn(btn, text, variant, customH) {
             btn.text = text;
@@ -2605,48 +2617,32 @@
 
             btn.onDraw = function () {
                 var g = this.graphics;
-                var w = this.size[0];
-                var ht = this.size[1];
+                var w = this.size[0], ht = this.size[1];
 
                 var bg, brd, txt, isBold;
+                var r = (variant === "primary") ? 4 : (variant === "pill" ? 2 : 3);
                 if (variant === "primary") {
-                    bg = C.accent;
-                    brd = [0.42, 0.47, 1.0, 1];
-                    txt = C.white;
-                    isBold = true;
+                    bg = C.accent; brd = [0.42, 0.47, 1.0, 1]; txt = C.white; isBold = true;
                 } else if (variant === "danger") {
-                    bg = [0.14, 0.10, 0.11, 1];
-                    brd = [0.23, 0.12, 0.13, 1];
-                    txt = C.accentRed;
-                    isBold = false;
+                    bg = [0.14, 0.10, 0.11, 1]; brd = [0.23, 0.12, 0.13, 1]; txt = C.accentRed; isBold = false;
                 } else if (variant === "active") {
-                    bg = C.activeTint;
-                    brd = C.activeBorder;
-                    txt = C.activeText;
-                    isBold = true;
+                    bg = C.activeTint; brd = C.activeBorder; txt = C.activeText; isBold = true;
                 } else if (variant === "pill") {
-                    bg = [0.102, 0.106, 0.122, 1];
-                    brd = C.borderSubtle;
-                    txt = C.textMuted;
-                    isBold = false;
+                    bg = [0.102, 0.106, 0.122, 1]; brd = C.borderSubtle; txt = C.textMuted; isBold = false;
                 } else {
-                    bg = C.bgButton;
-                    brd = C.borderMedium;
-                    txt = [0.69, 0.71, 0.76, 1];
-                    isBold = false;
+                    bg = C.bgButton; brd = C.borderMedium; txt = [0.69, 0.71, 0.76, 1]; isBold = false;
                 }
 
-                // Background
+                // Clear background
+                var clearBrush = g.newBrush(g.BrushType.SOLID_COLOR, C.bgPanel);
+                g.rectPath(0, 0, w, ht); g.fillPath(clearBrush);
+
+                var brdBrush = g.newBrush(g.BrushType.SOLID_COLOR, brd);
                 var bgBrush = g.newBrush(g.BrushType.SOLID_COLOR, bg);
-                g.rectPath(0, 0, w, ht);
-                g.fillPath(bgBrush);
 
-                // Border
-                var brdPen = g.newPen(g.PenType.SOLID_COLOR, brd, 1);
-                g.rectPath(0.5, 0.5, w - 1, ht - 1);
-                g.strokePath(brdPen);
+                fillRoundRect(g, brdBrush, 0, 0, w, ht, r);
+                fillRoundRect(g, bgBrush, 1, 1, w - 2, ht - 2, Math.max(0, r - 1));
 
-                // Centered text
                 var font = ScriptUI.newFont("sans", isBold ? "BOLD" : "REGULAR", variant === "pill" ? 8 : 10);
                 var textPen = g.newPen(g.PenType.SOLID_COLOR, txt, 1);
                 var sz = g.measureString(text, font);
@@ -2657,6 +2653,39 @@
                 g.drawString(text, textPen, tx, ty, font);
             };
 
+            return btn;
+        }
+
+        /** Styles a Figma-styled checkbox using an iconbutton */
+        function styleCheckbox(btn, text, defaultVal) {
+            btn.value = defaultVal;
+            btn.text = text; // Just for tests to find
+            btn.preferredSize = [16 + text.length * 6, 16];
+            btn.onDraw = function() {
+                var g = this.graphics;
+                var w = this.size[0], h = this.size[1];
+                var clear = g.newBrush(g.BrushType.SOLID_COLOR, C.bgPanel);
+                g.rectPath(0, 0, w, h); g.fillPath(clear);
+                
+                var boxBg = this.value ? C.accent : [0.086, 0.090, 0.106, 1];
+                var boxBrd = this.value ? C.accent : C.borderMedium;
+                var bgBrush = g.newBrush(g.BrushType.SOLID_COLOR, boxBg);
+                var brdBrush = g.newBrush(g.BrushType.SOLID_COLOR, boxBrd);
+                
+                var bx = 0, by = (h - 14) / 2;
+                fillRoundRect(g, brdBrush, bx, by, 14, 14, 2);
+                fillRoundRect(g, bgBrush, bx+1, by+1, 12, 12, 1);
+                
+                if (this.value) {
+                    var pen = g.newPen(g.PenType.SOLID_COLOR, C.white, 1.5);
+                    g.newPath(); g.moveTo(bx + 3, by + 7); g.lineTo(bx + 6, by + 10); g.lineTo(bx + 11, by + 4); g.strokePath(pen);
+                }
+                
+                var font = ScriptUI.newFont("sans", "REGULAR", 10);
+                var textPen = g.newPen(g.PenType.SOLID_COLOR, C.textSecondary, 1);
+                g.drawString(text, textPen, bx + 18, by + 2, font);
+            };
+            btn.onClick = function() { this.value = !this.value; this.notify("onDraw"); };
             return btn;
         }
 
@@ -2903,16 +2932,19 @@
         var hCheckRow1 = headCol.add("group");
         hCheckRow1.orientation = "row";
         hCheckRow1.spacing = 8;
-        var chkRoundCorners = hCheckRow1.add("checkbox", undefined, "Round");
-        var chkDoubleSided = hCheckRow1.add("checkbox", undefined, "Double");
+        var chkRoundCorners = hCheckRow1.add("iconbutton", undefined, undefined);
+        styleCheckbox(chkRoundCorners, "Round", false);
+        var chkDoubleSided = hCheckRow1.add("iconbutton", undefined, undefined);
+        styleCheckbox(chkDoubleSided, "Double", false);
 
         var hCheckRow2 = headCol.add("group");
         hCheckRow2.orientation = "row";
         hCheckRow2.alignChildren = ["left", "center"];
         hCheckRow2.spacing = 4;
-        var chkReverseDir = hCheckRow2.add("checkbox", undefined, "Rev");
-        var chkAnimate = hCheckRow2.add("checkbox", undefined, "Anim:");
-        chkAnimate.value = true;
+        var chkReverseDir = hCheckRow2.add("iconbutton", undefined, undefined);
+        styleCheckbox(chkReverseDir, "Rev", false);
+        var chkAnimate = hCheckRow2.add("iconbutton", undefined, undefined);
+        styleCheckbox(chkAnimate, "Anim:", true);
         var inputAnimFrames = hCheckRow2.add("edittext", undefined, "30");
         inputAnimFrames.characters = 3;
 
@@ -2948,11 +2980,11 @@
         var gridContainer = anchorCol.add("group");
         gridContainer.orientation = "column";
         gridContainer.alignChildren = ["center", "center"];
-        gridContainer.spacing = 2;
+        gridContainer.spacing = 3;
 
         function refreshAnchorPad() {
             for (var k = 0; k < anchorBtns.length; k++) {
-                styleBtn(anchorBtns[k], dirChars[k], (k === activeAnchorIdx) ? "active" : "pill", 20);
+                styleBtn(anchorBtns[k], dirChars[k], (k === activeAnchorIdx) ? "active" : "pill", 24);
                 anchorBtns[k].notify("onDraw");
             }
         }
@@ -2960,12 +2992,12 @@
         for (var rowIdx = 0; rowIdx < 3; rowIdx++) {
             var rowG = gridContainer.add("group");
             rowG.orientation = "row";
-            rowG.spacing = 2;
+            rowG.spacing = 3;
             for (var colIdx = 0; colIdx < 3; colIdx++) {
                 var btnIdx = rowIdx * 3 + colIdx;
                 var aBtn = rowG.add("iconbutton", undefined, undefined);
-                aBtn.preferredSize = [24, 20];
-                styleBtn(aBtn, dirChars[btnIdx], (btnIdx === activeAnchorIdx) ? "active" : "pill", 20);
+                aBtn.preferredSize = [24, 24];
+                styleBtn(aBtn, dirChars[btnIdx], (btnIdx === activeAnchorIdx) ? "active" : "pill", 24);
                 (function (idx) {
                     aBtn.onClick = function () {
                         activeAnchorIdx = idx;
@@ -3037,12 +3069,12 @@
         var fOptsRow = fadeCol.add("group");
         fOptsRow.orientation = "row";
         fOptsRow.spacing = 6;
-        var chkFadeIn = fOptsRow.add("checkbox", undefined, "In");
-        chkFadeIn.value = true;
-        var chkFadeOut = fOptsRow.add("checkbox", undefined, "Out");
-        chkFadeOut.value = true;
-        var chkMarkers = fOptsRow.add("checkbox", undefined, "Markers");
-        chkMarkers.value = true;
+        var chkFadeIn = fOptsRow.add("iconbutton", undefined, undefined);
+        styleCheckbox(chkFadeIn, "In", true);
+        var chkFadeOut = fOptsRow.add("iconbutton", undefined, undefined);
+        styleCheckbox(chkFadeOut, "Out", true);
+        var chkMarkers = fOptsRow.add("iconbutton", undefined, undefined);
+        styleCheckbox(chkMarkers, "Markers", true);
 
         var fActionsRow = fadeCol.add("group");
         fActionsRow.orientation = "row";
@@ -3127,17 +3159,17 @@
                 fillIcn.onDraw = (function (idx) {
                     return function () {
                         var g = this.graphics;
-                        var w = this.size[0];
-                        var ht = this.size[1];
-                        var br = g.newBrush(g.BrushType.SOLID_COLOR, hexToAeColor(fillColors[idx]));
-                        g.rectPath(0, 0, w, ht);
-                        g.fillPath(br);
-
-                        // If active, draw indigo highlight border; else subtle border
+                        var w = this.size[0], ht = this.size[1];
                         var isAct = (idx === activeSwatchIdx);
-                        var pen = g.newPen(g.PenType.SOLID_COLOR, isAct ? C.accent : C.borderSubtle, isAct ? 2 : 1);
-                        g.rectPath(0.5, 0.5, w - 1, ht - 1);
-                        g.strokePath(pen);
+                        
+                        var clear = g.newBrush(g.BrushType.SOLID_COLOR, C.bgPanel);
+                        g.rectPath(0, 0, w, ht); g.fillPath(clear);
+                        
+                        var brd = g.newBrush(g.BrushType.SOLID_COLOR, isAct ? C.accent : C.borderSubtle);
+                        var bg = g.newBrush(g.BrushType.SOLID_COLOR, hexToAeColor(fillColors[idx]));
+                        
+                        fillRoundRect(g, brd, 0, 0, w, ht, 3);
+                        fillRoundRect(g, bg, (isAct ? 2 : 1), (isAct ? 2 : 1), w - (isAct ? 4 : 2), ht - (isAct ? 4 : 2), (isAct ? 1 : 2));
                     };
                 })(i);
 

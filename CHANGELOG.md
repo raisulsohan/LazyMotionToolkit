@@ -2,6 +2,14 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.2
+
+### 🎨 Visual Refinements (Figma Accuracy)
+- **Rounded Buttons & Corners:** Implemented custom vector `fillRoundRect` drawing logic to accurately render Figma-style rounded buttons (`radius=4` for primary, `radius=3` for default, `radius=2` for pills).
+- **Custom SVG Checkboxes:** Replaced standard native Windows/macOS checkboxes with custom 14x14 stylized rounded boxes and SVG vector checkmarks.
+- **Improved Spacing:** Expanded master panel margins and section spacing. Adjusted the 9-point Anchor Grid to a perfect square layout (`24x24`) with proper `3px` padding between items.
+- **Swatch Radii:** Color swatches and F/S pills now render with `3px` rounded borders.
+
 ## 1.8.1
 
 ### 🐛 Bug Fix

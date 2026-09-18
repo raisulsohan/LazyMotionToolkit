@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.6";
+    var _buildVersion     = "1.8.7";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2744,6 +2744,7 @@
             leftHdr.alignChildren = ["left", "center"];
             leftHdr.spacing = 6;
             leftHdr.alignment = ["fill", "center"];
+            leftHdr.preferredSize.width = 10;
 
             var lbl1 = leftHdr.add("statictext", undefined, title1.toUpperCase());
             lbl1.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
@@ -2759,6 +2760,7 @@
             rightHdr.alignChildren = ["left", "center"];
             rightHdr.spacing = 6;
             rightHdr.alignment = ["fill", "center"];
+            rightHdr.preferredSize.width = 10;
 
             var lbl2 = rightHdr.add("statictext", undefined, title2.toUpperCase());
             lbl2.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
@@ -2936,6 +2938,7 @@
         headCol.alignChildren = ["fill", "top"];
         headCol.spacing = 4;
         headCol.alignment = ["fill", "bottom"];
+        headCol.preferredSize.width = 10;
 
         var hTypeRow = headCol.add("group");
         hTypeRow.orientation = "row";
@@ -2986,6 +2989,7 @@
         anchorCol.alignChildren = ["fill", "top"];
         anchorCol.spacing = 4;
         anchorCol.alignment = ["fill", "bottom"];
+        anchorCol.preferredSize.width = 10;
 
         var activeAnchorIdx = 4; // Default to Center '●'
         var dirChars = ['↖', '↑', '↗', '←', '●', '→', '↙', '↓', '↘'];
@@ -3050,6 +3054,7 @@
         fadeCol.alignChildren = ["fill", "top"];
         fadeCol.spacing = 4;
         fadeCol.alignment = ["fill", "bottom"];
+        fadeCol.preferredSize.width = 10;
 
         var fParamsRow = fadeCol.add("group");
         fParamsRow.orientation = "row";
@@ -3121,6 +3126,7 @@
         swatchCol.alignChildren = ["fill", "top"];
         swatchCol.spacing = 4;
         swatchCol.alignment = ["fill", "bottom"];
+        swatchCol.preferredSize.width = 10;
 
         var swCtrlRow = swatchCol.add("group");
         swCtrlRow.orientation = "row";

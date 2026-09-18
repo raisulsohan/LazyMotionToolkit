@@ -2,6 +2,11 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.7
+
+### 📐 Equal-Width Column Split
+- **Exact 50/50 Center Divider:** Applied `preferredSize.width = 10` to all column pairs and shared header groups. This tricks ScriptUI's layout engine into treating both columns as equally small, so the `fill` alignment distributes remaining space perfectly evenly — matching CSS Grid's `grid-cols-2` behavior. The vertical center divider now sits at the exact pixel-center of the panel across all sections (Motion Tools, Head/Anchor, Fade/Swatch).
+
 ## 1.8.6
 
 ### 📐 Layout Alignment Fix

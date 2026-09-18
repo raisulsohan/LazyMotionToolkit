@@ -2,6 +2,15 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.13
+
+### ✨ LazyType Reveal Rig for Auto Text Box
+- **Complete Auto Box Overhaul:** Replaced plain typewriter animation with an advanced 'LazyType reveal rig'.
+- **Measurement Layer System:** Adds an invisible 'Measure layer' with substr precision for calculating dynamic bounding boxes synchronized accurately with typed text frames.
+- **LazyType Settling:** Beautifully settles newly typed characters using combinations of blur, rise, scale pop, or drop based on user preference.
+- **Dynamic Animated UI Caret:** Added a customizable blinking caret (with width, color, and stroke settings) synced flawlessly to the typing progress.
+- **New Text Dialog:** Full-featured user interface added to configure auto box styles, settling animations, exact padding parameters, and text measurement modes (by chars, words, or lines).
+
 ## 1.8.12
 
 ### ✨ Header Bar Link, Repaint Performance & Robust Swatch Wrapping

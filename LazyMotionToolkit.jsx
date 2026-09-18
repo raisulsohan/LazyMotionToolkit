@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.12";
+    var _buildVersion     = "1.8.13";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -513,8 +513,71 @@
     }
 
     // ============================================================
-    // 4. Auto Text Box Maker (Smooth Animations & Real-Time Sync)
     // ============================================================
+    // 4. Auto Text Box Maker (LazyType reveal rig)
+    // ============================================================
+    var BOX_TAG     = " - Box";
+    var MEASURE_TAG = " - Box Measure";
+    var TYPE_HIDE   = "LazyType Hide";
+    var TYPE_SETTLE = "LazyType Settle";
+    var FX_REVEAL   = "LazyType Reveal";
+    var FX_BAND     = "LazyType Band";
+
+    // Range selector options live in a nested "Advanced" group and their match
+    // names have changed across versions, so each is looked up by a list of
+    // candidates and then by its display name. A miss only loses that one option.
+    var RANGE = {
+        start:      { match: ["ADBE Text Percent Start"], name: "Start" },
+        end:        { match: ["ADBE Text Percent End"], name: "End" },
+        basedOn:    { match: ["ADBE Text Range Type2", "ADBE Text Range Type"], name: "Based On" },
+        shape:      { match: ["ADBE Text Range Shape", "ADBE Text Selector Shape"], name: "Shape" },
+        smoothness: { match: ["ADBE Text Selector Smoothness", "ADBE Text Range Smoothness"], name: "Smoothness" }
+    };
+    var BASED_ON    = { chars: 1, charsNoSpace: 2, words: 3, lines: 4 };
+    var RANGE_SHAPE = { square: 1, rampUp: 2, rampDown: 3, triangle: 4, round: 5, smooth: 6 };
+
+    var AUTOBOX_STYLES = [
+        { label: "Typewriter (smooth)",  unit: "chars", animate: true,  soft: true },
+        { label: "Typewriter (hard)",    unit: "chars", animate: true,  soft: false, band: 0 },
+        { label: "Word by word",         unit: "words", animate: true,  soft: true,  band: 1 },
+        { label: "Line by line",         unit: "lines", animate: true,  soft: true,  band: 1 },
+        { label: "Box only (I animate Reveal)", unit: "chars", animate: false, soft: true },
+        { label: "Static box (no reveal)",      unit: "chars", animate: false, soft: false, noReveal: true }
+    ];
+
+    var AUTOBOX_SETTLES = [
+        { label: "Blur + rise", rise: 0.30, blur: 0.22 },
+        { label: "Rise",        rise: 0.45 },
+        { label: "Drop",        rise: -0.45 },
+        { label: "Scale pop",   scale: 55 },
+        { label: "Fade only",   plain: true }
+    ];
+
+    var AUTOBOX_DEFAULTS = {
+        style: 0, settle: 0, band: 2,
+        timingPerUnit: true, framesPerUnit: 1.5, totalFrames: 40, maxFrames: 120,
+        ease: 1, atPlayhead: true,
+        padX: 44, padY: 26, roundness: 14,
+        lead: 1, smooth: 3, fade: 4,
+        caret: true, caretWidth: 6, caretBlink: 2,
+        stroke: false, strokeWidth: 3,
+        boxColor: [0.10, 0.11, 0.13],
+        caretColor: [1, 1, 1]
+    };
+
+    /** Only the keys the engine knows about, arrays cloned so defaults stay clean. */
+    function mergeOptions(defaults, custom) {
+        var out = {};
+        for (var k in defaults) {
+            if (!defaults.hasOwnProperty(k)) continue;
+            var v = defaults[k];
+            out[k] = (v && typeof v !== "string" && v.length !== undefined) ? v.slice(0) : v;
+            if (custom && custom[k] !== undefined && custom[k] !== null) out[k] = custom[k];
+        }
+        return out;
+    }
+
+    // ---- Effect control helpers ----
     function addSliderControl(layer, name, defaultValue) {
         var slider = layer.property("ADBE Effect Parade").addProperty("ADBE Slider Control");
         slider.name = name;
@@ -529,215 +592,721 @@
         return ctrl;
     }
 
-    function executeAutoBoxMaker() {
+    function addCheckboxControl(layer, name, on) {
+        var ctrl = layer.property("ADBE Effect Parade").addProperty("ADBE Checkbox Control");
+        ctrl.name = name;
+        ctrl.property(1).setValue(on ? 1 : 0);
+        return ctrl;
+    }
+
+    function addPointControl(layer, name, defaultValue) {
+        var ctrl = layer.property("ADBE Effect Parade").addProperty("ADBE Point Control");
+        ctrl.name = name;
+        try { ctrl.property(1).setValue(defaultValue); } catch (e) {}
+        return ctrl;
+    }
+
+    function findEffectByName(layer, name) {
+        var fx = layer.property("ADBE Effect Parade");
+        if (!fx) return null;
+        for (var i = 1; i <= fx.numProperties; i++) {
+            if (fx.property(i).name === name) return fx.property(i);
+        }
+        return null;
+    }
+
+    function removeProperties(group) {
+        if (!group) return;
+        for (var i = group.numProperties; i >= 1; i--) {
+            try { group.property(i).remove(); } catch (e) {}
+        }
+    }
+
+    /** A property anywhere under `root`, by match name then by display name. */
+    function deepProp(root, matchName, displayName) {
+        if (!root) return null;
+        try {
+            var direct = root.property(matchName);
+            if (direct) return direct;
+        } catch (e) {}
+        try {
+            for (var i = 1; i <= root.numProperties; i++) {
+                var p = root.property(i);
+                if (p.matchName === matchName) return p;
+                if (displayName && p.name === displayName) return p;
+                if (p.propertyType !== PropertyType.PROPERTY) {
+                    var found = deepProp(p, matchName, displayName);
+                    if (found) return found;
+                }
+            }
+        } catch (e2) {}
+        return null;
+    }
+
+    function selectorProp(selector, spec) {
+        for (var i = 0; i < spec.match.length; i++) {
+            var p = deepProp(selector, spec.match[i], spec.name);
+            if (p) return p;
+        }
+        return null;
+    }
+
+    function setSelectorValue(selector, spec, value) {
+        var p = selectorProp(selector, spec);
+        if (!p) return false;
+        try { p.setValue(value); return true; } catch (e) { return false; }
+    }
+
+    function addTextAnimator(textLayer, name) {
+        var anim = textLayer.property("ADBE Text Properties").property("ADBE Text Animators").addProperty("ADBE Text Animator");
+        anim.name = name;
+        return anim;
+    }
+
+    function animatorProps(anim) { return anim.property("ADBE Text Animator Properties"); }
+    function addRangeSelector(anim) { return anim.property("ADBE Text Selectors").addProperty("ADBE Text Selector"); }
+
+    /** A JavaScript string literal, safe to paste into an expression. */
+    function exprString(s) {
+        return "\"" + String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\r/g, "\\r").replace(/\n/g, "\\n") + "\"";
+    }
+
+    function countUnits(text, unit) {
+        var s = String(text);
+        if (unit === "lines") return Math.max(1, s.split(/[\r\n\u0003]/).length);
+        if (unit === "words") {
+            var parts = s.split(/[\s\u0003]+/);
+            var n = 0;
+            for (var i = 0; i < parts.length; i++) if (parts[i].length) n++;
+            return Math.max(1, n);
+        }
+        return Math.max(1, s.length);
+    }
+
+    // ---- Expression pieces ----
+
+    /** Leaves `n` = how many characters / words / lines the text has. */
+    function unitCountSnippet(unit) {
+        if (unit === "words") {
+            return [
+                "var n = 0, wasWs = true;",
+                "for (var q = 0; q < s.length; q++) {",
+                "    var cq = s.charAt(q);",
+                "    var wq = (cq === \" \" || cq === \"\\r\" || cq === \"\\n\" || cq === \"\\t\" || cq === \"\\u0003\");",
+                "    if (!wq && wasWs) n++;",
+                "    wasWs = wq;",
+                "}",
+                "n = Math.max(1, n);"
+            ].join("\n");
+        }
+        if (unit === "lines") {
+            return [
+                "var n = 1;",
+                "for (var q = 0; q < s.length; q++) {",
+                "    var cq = s.charAt(q);",
+                "    if (cq === \"\\r\" || cq === \"\\n\" || cq === \"\\u0003\") n++;",
+                "}"
+            ].join("\n");
+        }
+        return "var n = Math.max(1, s.length);";
+    }
+
+    /** Cuts `s` down to its first `k` units, so the measure layer shows only typed text. */
+    function unitCutSnippet(unit) {
+        if (unit === "words") {
+            return [
+                "if (k <= 0) { \"\"; } else {",
+                "    var end = s.length, cnt = 0, inWord = false;",
+                "    for (var i = 0; i < s.length; i++) {",
+                "        var c = s.charAt(i);",
+                "        var ws = (c === \" \" || c === \"\\r\" || c === \"\\n\" || c === \"\\t\" || c === \"\\u0003\");",
+                "        if (!ws && !inWord) { inWord = true; cnt++; if (cnt > k) { end = i; break; } }",
+                "        if (ws) inWord = false;",
+                "        end = i + 1;",
+                "    }",
+                "    s.substr(0, end);",
+                "}"
+            ].join("\n");
+        }
+        if (unit === "lines") {
+            return [
+                "if (k <= 0) { \"\"; } else {",
+                "    var end = s.length, cnt = 0;",
+                "    for (var i = 0; i < s.length; i++) {",
+                "        var c = s.charAt(i);",
+                "        if (c === \"\\r\" || c === \"\\n\" || c === \"\\u0003\") { cnt++; if (cnt >= k) { end = i; break; } }",
+                "    }",
+                "    s.substr(0, end);",
+                "}"
+            ].join("\n");
+        }
+        return "s.substr(0, Math.max(0, k));";
+    }
+
+    /** Source Text of the measure layer: the typed part of its parent's text. */
+    function measureSourceExpression(unit) {
+        return [
+            "// LazyMotion AutoBox measure",
+            "var T = thisLayer.parent;",
+            "if (T == null) { value; } else {",
+            "    var s = \"\";",
+            "    try { s = T.text.sourceText.value; } catch (e1) { s = \"\"; }",
+            "    var p = 1;",
+            "    try { p = T.effect(" + exprString(FX_REVEAL) + ")(\"Slider\") / 100; } catch (e2) { p = 1; }",
+            "    p = Math.max(0, Math.min(1, p));",
+            unitCountSnippet(unit),
+            "    var k = Math.round(n * p);",
+            unitCutSnippet(unit),
+            "}"
+        ].join("\n");
+    }
+
+    /**
+     * Leaves `caret` (0-100+, the reveal edge) and `bandPct` (the settle band) for
+     * the range selectors. The caret sweeps past 100 so the band can clear the last
+     * unit and the settle animation actually finishes.
+     */
+    function caretSnippet(unit) {
+        return [
+            "// LazyMotion AutoBox reveal",
+            "var s = \"\";",
+            "try { s = thisLayer.text.sourceText.value; } catch (e1) { s = \"\"; }",
+            unitCountSnippet(unit),
+            "var band = 0;",
+            "try { band = effect(" + exprString(FX_BAND) + ")(\"Slider\"); } catch (e2) { band = 0; }",
+            "band = Math.max(0, Math.min(n, band));",
+            "var bandPct = 100 * band / n;",
+            "var p = 1;",
+            "try { p = effect(" + exprString(FX_REVEAL) + ")(\"Slider\") / 100; } catch (e3) { p = 1; }",
+            "p = Math.max(0, Math.min(1, p));",
+            "var caret = p * (100 + bandPct);"
+        ].join("\n");
+    }
+
+    /**
+     * The head of the two measuring expressions. Averaging a few frames of the
+     * measure layer's width turns the per-character staircase into a smooth slide,
+     * which is what makes the box feel attached to the typing instead of stepping.
+     */
+    function measurePrelude() {
+        return [
+            "// LazyMotion AutoBox " + _buildVersion,
+            "function num(nm, d){ try { var v = effect(nm)(\"Slider\"); return (v == null) ? d : v; } catch (e) { return d; } }",
+            "var T = thisLayer.parent;",
+            "var FD = thisComp.frameDuration;",
+            "function findMeasure(){",
+            "    if (T == null) return null;",
+            "    try { var byName = thisComp.layer(T.name + " + exprString(MEASURE_TAG) + "); if (byName != null) return byName; } catch (e1) {}",
+            "    for (var i = 1; i <= thisComp.numLayers; i++) {",
+            "        try {",
+            "            var L = thisComp.layer(i);",
+            "            if (L.index == thisLayer.index) continue;",
+            "            if (L.name.indexOf(" + exprString(MEASURE_TAG) + ") < 0) continue;",
+            "            if (L.parent != null && L.parent.index == T.index) return L;",
+            "        } catch (e2) {}",
+            "    }",
+            "    return null;",
+            "}",
+            "var MEAS = findMeasure();",
+            "var SRC = (MEAS != null) ? MEAS : T;",
+            "function boxRect(){",
+            "    var lead = num(\"Box Lead\", 0);",
+            "    var n = Math.max(0, Math.min(20, Math.round(num(\"Box Smooth\", 0))));",
+            "    var l = 0, tp = 0, w = 0, h = 0, wt = 0;",
+            "    for (var i = 0; i <= n; i++) {",
+            "        var k = n - i + 1;",  // newest frame weighs the most
+            "        var r = SRC.sourceRectAtTime(time + (lead - i) * FD, false);",
+            "        l += r.left * k; tp += r.top * k; w += r.width * k; h += r.height * k; wt += k;",
+            "    }",
+            "    return { left: l / wt, top: tp / wt, width: w / wt, height: h / wt };",
+            "}"
+        ].join("\n");
+    }
+
+    // Every other property reads the two Point Controls, which After Effects
+    // evaluates once per frame, so the text is only measured twice a frame.
+    var BOX_EXPR_HEAD = [
+        "// LazyMotion AutoBox",
+        "function num(nm, d){ try { var v = effect(nm)(\"Slider\"); return (v == null) ? d : v; } catch (e) { return d; } }",
+        "function flag(nm, d){ try { return effect(nm)(\"Checkbox\") ? 1 : 0; } catch (e) { return d; } }",
+        "function measured(nm, d){ try { return effect(nm)(\"Point\"); } catch (e) { return d; } }",
+        "var T = thisLayer.parent;"
+    ].join("\n");
+
+    function exprMeasuredSize() {
+        return measurePrelude() + "\nif (T == null) { value; } else { var r = boxRect(); [r.width, r.height]; }";
+    }
+
+    function exprMeasuredCenter() {
+        return measurePrelude() + "\nif (T == null) { value; } else { var r = boxRect(); [r.left + r.width / 2, r.top + r.height / 2]; }";
+    }
+
+    function exprBoxSize() {
+        return BOX_EXPR_HEAD + "\n" + [
+            "var s = measured(\"Box Rect\", [0, 0]);",
+            "var px = num(\"Padding X\", 0), py = num(\"Padding Y\", 0);",
+            "if (s[0] < 0.5 && s[1] < 0.5) { [0, 0]; } else { [Math.max(1, s[0] + px * 2), Math.max(1, s[1] + py * 2)]; }"
+        ].join("\n");
+    }
+
+    function exprBoxPosition() {
+        return BOX_EXPR_HEAD + "\nmeasured(\"Box Center\", value);";
+    }
+
+    function exprBoxRoundness() {
+        return BOX_EXPR_HEAD + "\n" + [
+            "var s = measured(\"Box Rect\", [0, 0]);",
+            "var py = num(\"Padding Y\", 0);",
+            // Never rounder than half the box, which is what makes a pill look wrong.
+            "Math.max(0, Math.min(num(\"Roundness\", 0), (s[1] + py * 2) / 2));"
+        ].join("\n");
+    }
+
+    function exprBoxOpacity() {
+        return BOX_EXPR_HEAD + "\n" + [
+            "var s = measured(\"Box Rect\", [0, 0]);",
+            "var vis = (s[0] > 0.5 || s[1] > 0.5) ? 1 : 0;",
+            "var k = 1;",
+            "var fade = Math.max(0, num(\"Box Fade\", 0));",
+            "if (fade > 0) {",
+            "    try {",
+            // The reveal's first keyframe is when the box should start fading in.
+            "        var st = T.effect(" + exprString(FX_REVEAL) + ")(\"Slider\").key(1).time;",
+            "        var x = Math.max(0, Math.min(1, (time - st) / framesToTime(fade)));",
+            "        k = x * x * (3 - 2 * x);",
+            "    } catch (e) { k = 1; }",
+            "}",
+            "var base = 100;",
+            "try { base = T.transform.opacity; } catch (e2) {}",
+            "Math.max(0, Math.min(100, base * (num(\"Box Opacity\", 100) / 100) * vis * k));"
+        ].join("\n");
+    }
+
+    function exprCaretSize() {
+        return BOX_EXPR_HEAD + "\n" + [
+            "var s = measured(\"Box Rect\", [0, 0]);",
+            "var h = s[1];",
+            "if (h < 1) { try { h = T.text.sourceText.style.fontSize; } catch (e) { h = 40; } }",
+            "[Math.max(1, num(\"Caret Width\", 6)), Math.max(1, h)];"
+        ].join("\n");
+    }
+
+    function exprCaretPosition() {
+        return BOX_EXPR_HEAD + "\n" + [
+            "var c = measured(\"Box Center\", [0, 0]);",
+            "var s = measured(\"Box Rect\", [0, 0]);",
+            "[c[0] + s[0] / 2 + num(\"Caret Gap\", 3) + Math.max(1, num(\"Caret Width\", 6)) / 2, c[1]];"
+        ].join("\n");
+    }
+
+    function exprCaretOpacity() {
+        return BOX_EXPR_HEAD + "\n" + [
+            "var on = flag(\"Caret\", 0);",
+            "var p = 1;",
+            "try { p = T.effect(" + exprString(FX_REVEAL) + ")(\"Slider\") / 100; } catch (e) { p = 1; }",
+            "var typing = (p > 0.0001 && p < 0.999) ? 1 : 0;",
+            "var blink = 1;",
+            "var rate = num(\"Caret Blink\", 0);",
+            "if (rate > 0) blink = (Math.floor(time * rate * 2) % 2 === 0) ? 1 : 0;",
+            // A single caret cannot sit at the end of wrapped text, so it steps aside.
+            "var multi = 0;",
+            "try {",
+            "    var fs = T.text.sourceText.style.fontSize;",
+            "    if (fs > 0 && measured(\"Box Rect\", [0, 0])[1] > fs * 1.7) multi = 1;",
+            "} catch (e2) {}",
+            "100 * on * blink * typing * (1 - multi);"
+        ].join("\n");
+    }
+
+    // ---- Rig builders ----
+
+    function applyRevealEase(prop, mode) {
+        if (prop.numKeys < 2) return;
+        try {
+            if (mode === 0) {
+                prop.setInterpolationTypeAtKey(1, KeyframeInterpolationType.LINEAR, KeyframeInterpolationType.LINEAR);
+                prop.setInterpolationTypeAtKey(2, KeyframeInterpolationType.LINEAR, KeyframeInterpolationType.LINEAR);
+                return;
+            }
+            // Ease out types fast and settles; smooth eases at both ends.
+            var influence = (mode === 2) ? [40, 70] : [12, 85];
+            prop.setTemporalEaseAtKey(1, [new KeyframeEase(0, influence[0])], [new KeyframeEase(0, influence[0])]);
+            prop.setTemporalEaseAtKey(2, [new KeyframeEase(0, influence[1])], [new KeyframeEase(0, influence[1])]);
+        } catch (e) {}
+    }
+
+    /**
+     * An invisible copy of the text layer whose Source Text is only the part that
+     * has been typed. `sourceRectAtTime` ignores opacity, so the real text layer
+     * always reports its full width — this copy is the only way to know how wide
+     * the visible glyphs actually are.
+     */
+    function createMeasureLayer(comp, textLayer, unit) {
+        var m = textLayer.duplicate();
+        m.name = textLayer.name + MEASURE_TAG;
+        // A duplicate brings the animators, effects and expressions along, and any
+        // of them can move the bounds. The measure layer must report plain metrics.
+        removeProperties(m.property("ADBE Text Properties").property("ADBE Text Animators"));
+        removeProperties(m.property("ADBE Effect Parade"));
+        try {
+            var op = m.property("ADBE Transform Group").property("ADBE Opacity");
+            op.expression = "";
+            while (op.numKeys > 0) op.removeKey(1);
+            op.setValue(0);
+        } catch (e1) {}
+        try { m.guideLayer = true; } catch (e2) {}
+        try { m.shy = true; } catch (e3) {}
+        try { m.motionBlur = false; } catch (e4) {}
+        try { m.label = 0; } catch (e5) {}
+        m.enabled = true; // sourceRectAtTime only reports on a layer AE evaluates
+        m.parent = textLayer; // keeps its place, and survives renaming the text layer
+        m.property("ADBE Text Properties").property("ADBE Text Document").expression = measureSourceExpression(unit);
+        m.moveAfter(textLayer);
+        m.selected = false;
+        return m;
+    }
+
+    function buildTypeAnimators(textLayer, style, o, fontSize) {
+        var basedOn = (style.unit === "words") ? BASED_ON.words
+                    : (style.unit === "lines") ? BASED_ON.lines : BASED_ON.chars;
+        var soft = style.soft && o.band > 0;
+
+        // 1. Hide everything past the caret, so the text types itself on.
+        var hide = addTextAnimator(textLayer, TYPE_HIDE);
+        animatorProps(hide).addProperty("ADBE Text Opacity").setValue(0);
+        var hideSel = addRangeSelector(hide);
+        setSelectorValue(hideSel, RANGE.basedOn, basedOn);
+        setSelectorValue(hideSel, RANGE.shape, RANGE_SHAPE.square);
+        setSelectorValue(hideSel, RANGE.smoothness, soft ? 100 : 0);
+        var hideStart = selectorProp(hideSel, RANGE.start);
+        if (hideStart) hideStart.expression = caretSnippet(style.unit) + "\nMath.max(0, Math.min(100, caret));";
+
+        if (!soft) return;
+
+        // 2. The few units at the caret arrive offset, blurred and transparent, and
+        //    land as the caret moves on. This is the part that stops it looking flat.
+        var settle = addTextAnimator(textLayer, TYPE_SETTLE);
+        var sp = animatorProps(settle);
+        var look = AUTOBOX_SETTLES[o.settle] || AUTOBOX_SETTLES[0];
+        try { sp.addProperty("ADBE Text Opacity").setValue(0); } catch (eO) {}
+        if (look.rise) { try { sp.addProperty("ADBE Text Position 3D").setValue([0, fontSize * look.rise, 0]); } catch (eP) {} }
+        if (look.scale) { try { sp.addProperty("ADBE Text Scale 3D").setValue([look.scale, look.scale, 100]); } catch (eS) {} }
+        if (look.blur) { try { sp.addProperty("ADBE Text Blur").setValue([fontSize * look.blur, fontSize * look.blur]); } catch (eB) {} }
+
+        var settleSel = addRangeSelector(settle);
+        setSelectorValue(settleSel, RANGE.basedOn, basedOn);
+        setSelectorValue(settleSel, RANGE.shape, RANGE_SHAPE.rampUp);
+        var sStart = selectorProp(settleSel, RANGE.start);
+        var sEnd = selectorProp(settleSel, RANGE.end);
+        if (sStart) sStart.expression = caretSnippet(style.unit) + "\nMath.max(0, Math.min(100, caret - bandPct));";
+        if (sEnd) sEnd.expression = caretSnippet(style.unit) + "\nMath.max(0, Math.min(100, caret));";
+    }
+
+    function buildBoxLayer(comp, textLayer, o, wantsReveal) {
+        var box = comp.layers.addShape();
+        box.name = textLayer.name + BOX_TAG;
+        box.moveAfter(textLayer);
+        box.parent = textLayer;
+
+        addSliderControl(box, "Padding X", o.padX);
+        addSliderControl(box, "Padding Y", o.padY);
+        addSliderControl(box, "Roundness", o.roundness);
+        addSliderControl(box, "Box Opacity", 100);
+        addColorControl(box, "Box Color", [o.boxColor[0], o.boxColor[1], o.boxColor[2], 1]);
+        addSliderControl(box, "Box Lead", o.lead);
+        addSliderControl(box, "Box Smooth", o.smooth);
+        addSliderControl(box, "Box Fade", wantsReveal ? o.fade : 0);
+        addCheckboxControl(box, "Caret", (o.caret && wantsReveal) ? 1 : 0);
+        addSliderControl(box, "Caret Width", o.caretWidth);
+        addSliderControl(box, "Caret Gap", Math.max(2, Math.round(o.caretWidth * 0.6)));
+        addSliderControl(box, "Caret Blink", o.caretBlink);
+        addColorControl(box, "Caret Color", [o.caretColor[0], o.caretColor[1], o.caretColor[2], 1]);
+        var rectCtrl = addPointControl(box, "Box Rect", [0, 0]);
+        var centerCtrl = addPointControl(box, "Box Center", [0, 0]);
+        rectCtrl.property(1).expression = exprMeasuredSize();
+        centerCtrl.property(1).expression = exprMeasuredCenter();
+
+        var contents = box.property("ADBE Root Vectors Group");
+
+        // The caret group is added first so it draws in front of the box fill.
+        var caretGrp = contents.addProperty("ADBE Vector Group");
+        caretGrp.name = "Caret";
+        var caretItems = caretGrp.property("ADBE Vectors Group");
+        var caretRect = caretItems.addProperty("ADBE Vector Shape - Rect");
+        caretRect.property("ADBE Vector Rect Size").expression = exprCaretSize();
+        caretRect.property("ADBE Vector Rect Position").expression = exprCaretPosition();
+        caretRect.property("ADBE Vector Rect Roundness").setValue(Math.min(3, o.caretWidth / 2));
+        caretItems.addProperty("ADBE Vector Graphic - Fill")
+            .property("ADBE Vector Fill Color").expression =
+                "try { effect(\"Caret Color\")(\"Color\"); } catch (e) { [1, 1, 1, 1]; }";
+        try {
+            caretGrp.property("ADBE Vector Transform Group").property("ADBE Vector Group Opacity").expression = exprCaretOpacity();
+        } catch (eCO) {}
+
+        var boxGrp = contents.addProperty("ADBE Vector Group");
+        boxGrp.name = "Auto Box";
+        var boxItems = boxGrp.property("ADBE Vectors Group");
+        var rect = boxItems.addProperty("ADBE Vector Shape - Rect");
+        rect.property("ADBE Vector Rect Size").expression = exprBoxSize();
+        rect.property("ADBE Vector Rect Position").expression = exprBoxPosition();
+        rect.property("ADBE Vector Rect Roundness").expression = exprBoxRoundness();
+        if (o.stroke) {
+            // Above the fill, or the fill would cover it.
+            var stroke = boxItems.addProperty("ADBE Vector Graphic - Stroke");
+            stroke.property("ADBE Vector Stroke Color").expression =
+                "try { effect(\"Caret Color\")(\"Color\"); } catch (e) { [1, 1, 1, 1]; }";
+            stroke.property("ADBE Vector Stroke Width").setValue(Math.max(0.5, o.strokeWidth));
+        }
+        boxItems.addProperty("ADBE Vector Graphic - Fill")
+            .property("ADBE Vector Fill Color").expression =
+                "try { effect(\"Box Color\")(\"Color\"); } catch (e) { [0.1, 0.11, 0.13, 1]; }";
+
+        var tr = box.property("ADBE Transform Group");
+        tr.property("ADBE Anchor Point").setValue([0, 0, 0]);
+        tr.property("ADBE Position").setValue([0, 0, 0]);
+        tr.property("ADBE Scale").setValue([100, 100, 100]);
+        tr.property("ADBE Opacity").expression = exprBoxOpacity();
+        return box;
+    }
+
+    /** Everything Auto Box ever added to `textLayer`, so re-running replaces instead of stacking. */
+    function removeAutoBoxRig(comp, textLayer) {
+        var removed = 0;
+        for (var i = comp.numLayers; i >= 1; i--) {
+            var l = comp.layer(i);
+            var mine = false;
+            try { mine = (l.parent !== null && l.parent.index === textLayer.index); } catch (e) {}
+            if (!mine) continue;
+            if (l.name.indexOf(BOX_TAG) < 0 && l.name.indexOf(MEASURE_TAG) < 0) continue;
+            try { l.remove(); removed++; } catch (e2) {}
+        }
+        var animators = textLayer.property("ADBE Text Properties").property("ADBE Text Animators");
+        if (animators) {
+            for (var a = animators.numProperties; a >= 1; a--) {
+                var nm = animators.property(a).name;
+                if (nm === TYPE_HIDE || nm === TYPE_SETTLE) {
+                    try { animators.property(a).remove(); removed++; } catch (e3) {}
+                }
+            }
+        }
+        var fxNames = [FX_REVEAL, FX_BAND];
+        for (var f = 0; f < fxNames.length; f++) {
+            var fx = findEffectByName(textLayer, fxNames[f]);
+            if (fx) { try { fx.remove(); removed++; } catch (e4) {} }
+        }
+        return removed;
+    }
+
+    function createAutoBox(comp, textLayer, o) {
+        var style = AUTOBOX_STYLES[o.style] || AUTOBOX_STYLES[0];
+        var doc = textLayer.property("ADBE Text Properties").property("ADBE Text Document").value;
+        var fontSize = 50;
+        try { if (doc.fontSize > 0) fontSize = doc.fontSize; } catch (eFs) {}
+        var band = (style.band !== undefined) ? style.band : o.band;
+        var opts = mergeOptions(o, { band: band });
+
+        removeAutoBoxRig(comp, textLayer);
+
+        var wantsReveal = !style.noReveal;
+        if (wantsReveal) {
+            var revealFx = addSliderControl(textLayer, FX_REVEAL, 0);
+            addSliderControl(textLayer, FX_BAND, Math.max(0, band));
+            var reveal = revealFx.property(1);
+            // Long text types for longer: one duration for every length looks wrong.
+            var units = countUnits(doc.text, style.unit);
+            var frames = opts.timingPerUnit
+                ? Math.min(opts.maxFrames, Math.max(2, Math.round(units * opts.framesPerUnit)))
+                : Math.max(2, Math.round(opts.totalFrames));
+            var startTime = opts.atPlayhead ? comp.time : textLayer.inPoint;
+            reveal.setValueAtTime(startTime, 0);
+            reveal.setValueAtTime(startTime + frames / comp.frameRate, 100);
+            applyRevealEase(reveal, opts.ease);
+            createMeasureLayer(comp, textLayer, style.unit);
+        }
+
+        if (style.animate) buildTypeAnimators(textLayer, style, opts, fontSize);
+        return buildBoxLayer(comp, textLayer, opts, wantsReveal);
+    }
+
+    /** Engine: box + reveal rig for every text layer in `layers`. Returns what it skipped. */
+    function autoBoxLayers(comp, layers, options) {
+        var o = mergeOptions(AUTOBOX_DEFAULTS, options);
+        var made = [];
+        var skipped = [];
+        app.beginUndoGroup("LazyMotion: Auto Box");
+        try {
+            for (var i = 0; i < layers.length; i++) {
+                var layer = layers[i];
+                if (!(layer instanceof TextLayer)) {
+                    skipped.push(layer.name + " (not a text layer)");
+                    continue;
+                }
+                // One layer that fails must not stop the others.
+                try {
+                    made.push(createAutoBox(comp, layer, o));
+                } catch (eLayer) {
+                    skipped.push(layer.name + " (" + eLayer.toString() + ")");
+                }
+            }
+            try {
+                for (var s = 0; s < layers.length; s++) layers[s].selected = false;
+                for (var m = 0; m < made.length; m++) made[m].selected = true;
+            } catch (eSel) {}
+        } finally {
+            app.endUndoGroup();
+        }
+        return { made: made, skipped: skipped };
+    }
+
+    function executeAutoBoxMaker(options) {
         var comp = app.project.activeItem;
         if (!comp || !(comp instanceof CompItem)) {
             alert("Please open a composition first.");
             return;
         }
-
-        var selectedLayers = comp.selectedLayers;
+        var selected = comp.selectedLayers;
         var anyText = false;
-        for (var s = 0; s < selectedLayers.length; s++) {
-            if (selectedLayers[s] instanceof TextLayer) anyText = true;
+        for (var s = 0; s < selected.length; s++) {
+            if (selected[s] instanceof TextLayer) anyText = true;
         }
         if (!anyText) {
             alert("Please select a Text Layer first, then click Auto Box.");
             return;
         }
+        var result = autoBoxLayers(comp, selected, options);
+        if (result.skipped.length) alert("Auto Box skipped:\n" + result.skipped.join("\n"));
+    }
 
-        app.beginUndoGroup("LazyMotion: Create Auto Box");
-        try {
-            for (var i = 0; i < selectedLayers.length; i++) {
-                var textLayer = selectedLayers[i];
-                if (!(textLayer instanceof TextLayer)) continue;
-
-                var boxLayer = comp.layers.addShape();
-                boxLayer.name = textLayer.name + " - Box";
-                boxLayer.moveAfter(textLayer);
-                boxLayer.parent = textLayer;
-
-                // Controls on Box Layer
-                addSliderControl(boxLayer, "Padding X", 50);
-                addSliderControl(boxLayer, "Padding Y", 30);
-                addSliderControl(boxLayer, "Roundness", 25);
-                addSliderControl(boxLayer, "Box Opacity", 100);
-                addColorControl(boxLayer, "Box Color", [0.85, 0.12, 0.15, 1]);
-
-                var shapeGroup = boxLayer.property("ADBE Root Vectors Group").addProperty("ADBE Vector Group");
-                shapeGroup.name = "Auto Box";
-
-                var rectPath = shapeGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Shape - Rect");
-
-                // Dynamic Size Expression
-                rectPath.property("ADBE Vector Rect Size").expression =
-                    "var t = thisLayer.parent;\n" +
-                    "if (t != null) {\n" +
-                    "    var r = t.sourceRectAtTime(time, false);\n" +
-                    "    var px = effect(\"Padding X\")(\"Slider\");\n" +
-                    "    var py = effect(\"Padding Y\")(\"Slider\");\n" +
-                    "    \n" +
-                    "    var progress = 100;\n" +
-                    "    var hasRangeSel = false;\n" +
-                    "    try {\n" +
-                    "        if (t.text && t.text.animator && t.text.animator.numProperties > 0) {\n" +
-                    "            for (var a = 1; a <= t.text.animator.numProperties; a++) {\n" +
-                    "                var anim = t.text.animator(a);\n" +
-                    "                if (anim.selector && anim.selector.numProperties > 0) {\n" +
-                    "                    for (var s = 1; s <= anim.selector.numProperties; s++) {\n" +
-                    "                        var sel = anim.selector(s);\n" +
-                    "                        if (sel.start && (sel.start.numKeys > 0 || sel.start.isTimeVarying)) {\n" +
-                    "                            progress = Math.min(progress, sel.start.value);\n" +
-                    "                            hasRangeSel = true;\n" +
-                    "                        } else if (sel.end && (sel.end.numKeys > 0 || sel.end.isTimeVarying)) {\n" +
-                    "                            progress = Math.min(progress, sel.end.value);\n" +
-                    "                            hasRangeSel = true;\n" +
-                    "                        } else if (sel.offset && (sel.offset.numKeys > 0 || sel.offset.isTimeVarying)) {\n" +
-                    "                            progress = Math.min(progress, Math.max(0, Math.min(100, 100 + sel.offset.value)));\n" +
-                    "                            hasRangeSel = true;\n" +
-                    "                        }\n" +
-                    "                    }\n" +
-                    "                }\n" +
-                    "            }\n" +
-                    "        }\n" +
-                    "    } catch(e) {}\n" +
-                    "    \n" +
-                    "    var visibleRatio = hasRangeSel ? Math.max(0, Math.min(1, progress / 100)) : 1;\n" +
-                    "    var curW = r.width * visibleRatio;\n" +
-                    "    \n" +
-                    "    if (curW > 0 && r.height > 0) {\n" +
-                    "        [Math.max(1, curW + px * 2), Math.max(1, r.height + py * 2)];\n" +
-                    "    } else {\n" +
-                    "        [0, 0];\n" +
-                    "    }\n" +
-                    "} else {\n" +
-                    "    value;\n" +
-                    "}";
-
-                // Dynamic Position Expression
-                rectPath.property("ADBE Vector Rect Position").expression =
-                    "var t = thisLayer.parent;\n" +
-                    "if (t != null) {\n" +
-                    "    var r = t.sourceRectAtTime(time, false);\n" +
-                    "    \n" +
-                    "    var progress = 100;\n" +
-                    "    var hasRangeSel = false;\n" +
-                    "    try {\n" +
-                    "        if (t.text && t.text.animator && t.text.animator.numProperties > 0) {\n" +
-                    "            for (var a = 1; a <= t.text.animator.numProperties; a++) {\n" +
-                    "                var anim = t.text.animator(a);\n" +
-                    "                if (anim.selector && anim.selector.numProperties > 0) {\n" +
-                    "                    for (var s = 1; s <= anim.selector.numProperties; s++) {\n" +
-                    "                        var sel = anim.selector(s);\n" +
-                    "                        if (sel.start && (sel.start.numKeys > 0 || sel.start.isTimeVarying)) {\n" +
-                    "                            progress = Math.min(progress, sel.start.value);\n" +
-                    "                            hasRangeSel = true;\n" +
-                    "                        } else if (sel.end && (sel.end.numKeys > 0 || sel.end.isTimeVarying)) {\n" +
-                    "                            progress = Math.min(progress, sel.end.value);\n" +
-                    "                            hasRangeSel = true;\n" +
-                    "                        } else if (sel.offset && (sel.offset.numKeys > 0 || sel.offset.isTimeVarying)) {\n" +
-                    "                            progress = Math.min(progress, Math.max(0, Math.min(100, 100 + sel.offset.value)));\n" +
-                    "                            hasRangeSel = true;\n" +
-                    "                        }\n" +
-                    "                    }\n" +
-                    "                }\n" +
-                    "            }\n" +
-                    "        }\n" +
-                    "    } catch(e) {}\n" +
-                    "    \n" +
-                    "    var visibleRatio = hasRangeSel ? Math.max(0, Math.min(1, progress / 100)) : 1;\n" +
-                    "    var curW = r.width * visibleRatio;\n" +
-                    "    \n" +
-                    "    if (curW > 0 && r.height > 0) {\n" +
-                    "        [r.left + curW / 2, r.top + r.height / 2];\n" +
-                    "    } else {\n" +
-                    "        [r.left, r.top + r.height / 2];\n" +
-                    "    }\n" +
-                    "} else {\n" +
-                    "    value;\n" +
-                    "}";
-
-                // Roundness Expression
-                rectPath.property("ADBE Vector Rect Roundness").expression =
-                    "try { effect(\"Roundness\")(\"Slider\"); } catch(e) { 0; }";
-
-                var rectFill = shapeGroup.property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Fill");
-                rectFill.property("ADBE Vector Fill Color").expression =
-                    "try { effect(\"Box Color\")(\"Color\"); } catch(e) { [0.15,0.15,0.15,1]; }";
-
-                var transform = boxLayer.property("ADBE Transform Group");
-                transform.property("ADBE Anchor Point").setValue([0, 0, 0]);
-                transform.property("ADBE Position").setValue([0, 0, 0]);
-                transform.property("ADBE Scale").setValue([100, 100, 100]);
-
-                // Opacity Expression
-                transform.property("ADBE Opacity").expression =
-                    "var t = thisLayer.parent;\n" +
-                    "if (t != null) {\n" +
-                    "    var baseOp = t.transform.opacity.value;\n" +
-                    "    var boxOpMult = 1;\n" +
-                    "    try { boxOpMult = effect(\"Box Opacity\")(\"Slider\") / 100; } catch(e) {}\n" +
-                    "    \n" +
-                    "    var animOp = 100;\n" +
-                    "    var hasRangeSel = false;\n" +
-                    "    var rangeProg = 100;\n" +
-                    "    \n" +
-                    "    try {\n" +
-                    "        if (t.text && t.text.animator && t.text.animator.numProperties > 0) {\n" +
-                    "            for (var a = 1; a <= t.text.animator.numProperties; a++) {\n" +
-                    "                var anim = t.text.animator(a);\n" +
-                    "                var propOp = 100;\n" +
-                    "                try {\n" +
-                    "                    if (anim.property(\"ADBE Text Animator Properties\") && anim.property(\"ADBE Text Animator Properties\").property(\"ADBE Text Opacity\")) {\n" +
-                    "                        propOp = anim.property(\"ADBE Text Animator Properties\").property(\"ADBE Text Opacity\").value;\n" +
-                    "                    } else if (anim.property(\"Opacity\")) {\n" +
-                    "                        propOp = anim.property(\"Opacity\").value;\n" +
-                    "                    }\n" +
-                    "                } catch(eProp) {}\n" +
-                    "                \n" +
-                    "                if (anim.selector && anim.selector.numProperties > 0) {\n" +
-                    "                    for (var s = 1; s <= anim.selector.numProperties; s++) {\n" +
-                    "                        var sel = anim.selector(s);\n" +
-                    "                        if (sel.start && (sel.start.numKeys > 0 || sel.start.isTimeVarying)) {\n" +
-                    "                            rangeProg = Math.min(rangeProg, sel.start.value);\n" +
-                    "                            hasRangeSel = true;\n" +
-                    "                        } else if (sel.end && (sel.end.numKeys > 0 || sel.end.isTimeVarying)) {\n" +
-                    "                            rangeProg = Math.min(rangeProg, sel.end.value);\n" +
-                    "                            hasRangeSel = true;\n" +
-                    "                        } else if (sel.offset && (sel.offset.numKeys > 0 || sel.offset.isTimeVarying)) {\n" +
-                    "                            rangeProg = Math.min(rangeProg, Math.max(0, Math.min(100, 100 + sel.offset.value)));\n" +
-                    "                            hasRangeSel = true;\n" +
-                    "                        }\n" +
-                    "                    }\n" +
-                    "                }\n" +
-                    "                \n" +
-                    "                if (hasRangeSel) {\n" +
-                    "                    var effectiveAnimOp = propOp + (100 - propOp) * (rangeProg / 100);\n" +
-                    "                    animOp = (animOp * effectiveAnimOp) / 100;\n" +
-                    "                } else if (propOp < 100) {\n" +
-                    "                    animOp = (animOp * propOp) / 100;\n" +
-                    "                }\n" +
-                    "            }\n" +
-                    "        }\n" +
-                    "    } catch(err) {}\n" +
-                    "    \n" +
-                    "    if (hasRangeSel && rangeProg <= 0) {\n" +
-                    "        0;\n" +
-                    "    } else {\n" +
-                    "        Math.max(0, Math.min(100, (baseOp * animOp / 100) * boxOpMult));\n" +
-                    "    }\n" +
-                    "} else {\n" +
-                    "    value;\n" +
-                    "}";
-
-                textLayer.selected = false;
-                boxLayer.selected = true;
-            }
-        } catch (e) {
-            alert("Auto Box Error: " + e.toString());
-        } finally {
-            app.endUndoGroup();
+    // ---- Auto Box dialog ----
+    function showAutoBoxDialog() {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) {
+            alert("Please open a composition first.");
+            return;
         }
+        var o = mergeOptions(AUTOBOX_DEFAULTS, null);
+        var picked = { box: o.boxColor.slice(0), caret: o.caretColor.slice(0) };
+
+        function styleLabels() {
+            var out = [];
+            for (var i = 0; i < AUTOBOX_STYLES.length; i++) out.push(AUTOBOX_STYLES[i].label);
+            return out;
+        }
+        function settleLabels() {
+            var out = [];
+            for (var i = 0; i < AUTOBOX_SETTLES.length; i++) out.push(AUTOBOX_SETTLES[i].label);
+            return out;
+        }
+        function numberRow(parent, label, value, tip, chars) {
+            var g = parent.add("group");
+            g.orientation = "row";
+            g.alignChildren = ["left", "center"];
+            var l = g.add("statictext", undefined, label);
+            l.preferredSize.width = 104;
+            var ed = g.add("edittext", undefined, String(value));
+            ed.characters = chars || 5;
+            if (tip) ed.helpTip = tip;
+            return ed;
+        }
+
+        var dlg = new Window("dialog", "LazyMotion — Auto Box & Text Reveal", undefined, { resizeable: false });
+        dlg.orientation = "column";
+        dlg.alignChildren = ["fill", "top"];
+        dlg.spacing = 10;
+        dlg.margins = 15;
+
+        var cols = dlg.add("group");
+        cols.orientation = "row";
+        cols.alignChildren = ["fill", "top"];
+        cols.spacing = 10;
+
+        var pReveal = cols.add("panel", undefined, "Text reveal");
+        pReveal.orientation = "column";
+        pReveal.alignChildren = ["fill", "top"];
+        pReveal.margins = 12;
+        pReveal.spacing = 6;
+        var ddStyle = pReveal.add('dropdownlist', undefined, styleLabels());
+        ddStyle.selection = o.style;
+        var ddSettle = pReveal.add('dropdownlist', undefined, settleLabels());
+        ddSettle.selection = o.settle;
+        
+        var edBand = numberRow(pReveal, 'Settle band:', o.band, 'Size of the transition wave');
+        
+        var gTiming = pReveal.add('group');
+        gTiming.orientation = 'row';
+        gTiming.alignChildren = ['left', 'center'];
+        var rbUnit = gTiming.add('radiobutton', undefined, 'Time per unit');
+        var rbTotal = gTiming.add('radiobutton', undefined, 'Total time');
+        rbUnit.value = o.timingPerUnit;
+        rbTotal.value = !o.timingPerUnit;
+        
+        var edFramesUnit = numberRow(pReveal, 'Frames / unit:', o.framesPerUnit);
+        var edTotalFrames = numberRow(pReveal, 'Total frames:', o.totalFrames);
+        var chkPlayhead = pReveal.add('checkbox', undefined, 'Start at playhead');
+        chkPlayhead.value = o.atPlayhead;
+        
+        var pBox = cols.add('panel', undefined, 'Box and Padding');
+        pBox.orientation = 'column';
+        pBox.alignChildren = ['fill', 'top'];
+        pBox.margins = 12;
+        pBox.spacing = 6;
+        var edPadX = numberRow(pBox, 'Padding X:', o.padX);
+        var edPadY = numberRow(pBox, 'Padding Y:', o.padY);
+        var edRound = numberRow(pBox, 'Roundness:', o.roundness);
+        var edLead = numberRow(pBox, 'Box Lead:', o.lead);
+        var edSmooth = numberRow(pBox, 'Box Smooth:', o.smooth);
+        var edFade = numberRow(pBox, 'Box Fade:', o.fade);
+        
+        var pCaret = cols.add('panel', undefined, 'Caret and Stroke');
+        pCaret.orientation = 'column';
+        pCaret.alignChildren = ['fill', 'top'];
+        pCaret.margins = 12;
+        pCaret.spacing = 6;
+        var chkCaret = pCaret.add('checkbox', undefined, 'Show Caret');
+        chkCaret.value = o.caret;
+        var edCWidth = numberRow(pCaret, 'Caret Width:', o.caretWidth);
+        var edCBlink = numberRow(pCaret, 'Caret Blink:', o.caretBlink);
+        
+        var chkStroke = pCaret.add('checkbox', undefined, 'Add Stroke');
+        chkStroke.value = o.stroke;
+        var edSWidth = numberRow(pCaret, 'Stroke Width:', o.strokeWidth);
+        
+        var btnGrp = dlg.add('group');
+        btnGrp.alignment = ['right', 'bottom'];
+        var btnCancel = btnGrp.add('button', undefined, 'Cancel');
+        var btnApply = btnGrp.add('button', undefined, 'Apply');
+        
+        btnApply.onClick = function() {
+            var opts = {
+                style: ddStyle.selection ? ddStyle.selection.index : 0,
+                settle: ddSettle.selection ? ddSettle.selection.index : 0,
+                band: parseFloat(edBand.text) || o.band,
+                timingPerUnit: rbUnit.value,
+                framesPerUnit: parseFloat(edFramesUnit.text) || o.framesPerUnit,
+                totalFrames: parseFloat(edTotalFrames.text) || o.totalFrames,
+                maxFrames: o.maxFrames,
+                ease: o.ease,
+                atPlayhead: chkPlayhead.value,
+                padX: parseFloat(edPadX.text) || 0,
+                padY: parseFloat(edPadY.text) || 0,
+                roundness: parseFloat(edRound.text) || 0,
+                lead: parseFloat(edLead.text) || 0,
+                smooth: parseFloat(edSmooth.text) || 0,
+                fade: parseFloat(edFade.text) || 0,
+                caret: chkCaret.value,
+                caretWidth: parseFloat(edCWidth.text) || o.caretWidth,
+                caretBlink: parseFloat(edCBlink.text) || o.caretBlink,
+                stroke: chkStroke.value,
+                strokeWidth: parseFloat(edSWidth.text) || o.strokeWidth,
+                boxColor: o.boxColor,
+                caretColor: o.caretColor
+            };
+            dlg.close();
+            executeAutoBoxMaker(opts);
+        };
+        btnCancel.onClick = function() { dlg.close(); };
+        
+        dlg.show();
     }
 
     // ============================================================
@@ -2912,7 +3481,7 @@
         btnAutoBox.preferredSize.width = 10;
         btnAutoBox.alignment = ["fill", "center"];
         btnAutoBox.helpTip = "Create Pixel-Perfect Auto-Resizing Background Box for Text Layer";
-        btnAutoBox.onClick = executeAutoBoxMaker;
+        btnAutoBox.onClick = showAutoBoxDialog;
 
         var btnGrid = tRow2.add("iconbutton", undefined, undefined);
         styleBtn(btnGrid, "⊞ Grid Maker", "default", 30);

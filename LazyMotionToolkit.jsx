@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.3";
+    var _buildVersion     = "1.8.4";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2595,6 +2595,10 @@
             white:         [1.000, 1.000, 1.000, 1]
         };
 
+        try {
+            win.graphics.backgroundColor = win.graphics.newBrush(win.graphics.BrushType.SOLID_COLOR, C.bgPanel);
+        } catch(e) {}
+
         // ---- UI Drawing Helpers ----
 
         function fillRoundRect(g, brush, x, y, w, h, r) {
@@ -2643,21 +2647,26 @@
                 fillRoundRect(g, brdBrush, 0, 0, w, ht, r);
                 fillRoundRect(g, bgBrush, 1, 1, w - 2, ht - 2, Math.max(0, r - 1));
 
-                var font = ScriptUI.newFont("sans", isBold ? "BOLD" : "REGULAR", variant === "pill" ? 8 : 10);
-                var textPen = g.newPen(g.PenType.SOLID_COLOR, txt, 1);
-                var sz = g.measureString(text, font);
-                var tw = (sz && sz.width) ? sz.width : (sz ? sz[0] : 0);
-                var th = (sz && sz.height) ? sz.height : (sz ? sz[1] : 11);
-                var tx = Math.max(1, (w - tw) / 2);
-                var ty = Math.max(1, (ht - th) / 2);
-                g.drawString(text, textPen, tx, ty, font);
+                if (variant === "active" && text === "●") {
+                    var dotBrush = g.newBrush(g.BrushType.SOLID_COLOR, txt);
+                    g.newPath(); g.ellipsePath(w/2 - 3.5, ht/2 - 3.5, 7, 7); g.fillPath(dotBrush);
+                } else {
+                    var font = ScriptUI.newFont("sans", isBold ? "BOLD" : "REGULAR", variant === "pill" ? 10 : 10);
+                    var textPen = g.newPen(g.PenType.SOLID_COLOR, txt, 1);
+                    var sz = g.measureString(text, font);
+                    var tw = (sz && sz.width) ? sz.width : (sz ? sz[0] : 0);
+                    var th = (sz && sz.height) ? sz.height : (sz ? sz[1] : 11);
+                    var tx = Math.max(1, (w - tw) / 2);
+                    var ty = Math.max(1, (ht - th) / 2);
+                    g.drawString(text, textPen, tx, ty, font);
+                }
             };
 
             return btn;
         }
 
         /** Creates a Figma-styled checkbox using an iconbutton and statictext */
-        function createCheckbox(parent, text, defaultVal) {
+        function createCheckbox(parent, text, defaultVal, isCircle) {
             var grp = parent.add("group");
             grp.orientation = "row";
             grp.alignChildren = ["left", "center"];
@@ -2666,7 +2675,7 @@
             var btn = grp.add("iconbutton", undefined, undefined);
             btn.preferredSize = [14, 14];
             btn.value = defaultVal;
-            btn.text = text; // Just for tests to find
+            // Removed btn.text to prevent native overlapping draw. Test scripts will find the statictext instead.
             
             btn.onDraw = function() {
                 var g = this.graphics;
@@ -2679,8 +2688,13 @@
                 var bgBrush = g.newBrush(g.BrushType.SOLID_COLOR, boxBg);
                 var brdBrush = g.newBrush(g.BrushType.SOLID_COLOR, boxBrd);
                 
-                fillRoundRect(g, brdBrush, 0, 0, w, h, 2);
-                fillRoundRect(g, bgBrush, 1, 1, w-2, h-2, 1);
+                if (isCircle) {
+                    g.newPath(); g.ellipsePath(0, 0, w, h); g.fillPath(brdBrush);
+                    g.newPath(); g.ellipsePath(1, 1, w-2, h-2); g.fillPath(bgBrush);
+                } else {
+                    fillRoundRect(g, brdBrush, 0, 0, w, h, 2);
+                    fillRoundRect(g, bgBrush, 1, 1, w-2, h-2, 1);
+                }
                 
                 if (this.value) {
                     var pen = g.newPen(g.PenType.SOLID_COLOR, C.white, 1.5);
@@ -2940,15 +2954,15 @@
         var hCheckRow1 = headCol.add("group");
         hCheckRow1.orientation = "row";
         hCheckRow1.spacing = 8;
-        var chkRoundCorners = createCheckbox(hCheckRow1, "Round", false);
-        var chkDoubleSided = createCheckbox(hCheckRow1, "Double", false);
+        var chkRoundCorners = createCheckbox(hCheckRow1, "Round", false, true);
+        var chkDoubleSided = createCheckbox(hCheckRow1, "Double", false, true);
 
         var hCheckRow2 = headCol.add("group");
         hCheckRow2.orientation = "row";
         hCheckRow2.alignChildren = ["left", "center"];
         hCheckRow2.spacing = 4;
-        var chkReverseDir = createCheckbox(hCheckRow2, "Rev", false);
-        var chkAnimate = createCheckbox(hCheckRow2, "Anim:", true);
+        var chkReverseDir = createCheckbox(hCheckRow2, "Rev", false, true);
+        var chkAnimate = createCheckbox(hCheckRow2, "Anim:", true, false);
         var inputAnimFrames = hCheckRow2.add("edittext", undefined, "30");
         inputAnimFrames.characters = 3;
 
@@ -3156,7 +3170,7 @@
 
                 // Rounded Color swatch block
                 var fillIcn = colBox.add("iconbutton", undefined, undefined);
-                fillIcn.size = [28, 20];
+                fillIcn.size = [30, 22];
                 fillIcn.onDraw = (function (idx) {
                     return function () {
                         var g = this.graphics;
@@ -3188,8 +3202,8 @@
 
                 // 'F' Pill Button
                 var btnF = colBox.add("iconbutton", undefined, undefined);
-                btnF.size = [28, 14];
-                styleBtn(btnF, "F", "pill", 14);
+                btnF.size = [30, 16];
+                styleBtn(btnF, "F", "pill", 16);
                 btnF.helpTip = "Apply Fill color";
                 btnF.onClick = (function (idx) {
                     return function () {
@@ -3201,8 +3215,8 @@
 
                 // 'S' Pill Button
                 var btnS = colBox.add("iconbutton", undefined, undefined);
-                btnS.size = [28, 14];
-                styleBtn(btnS, "S", "pill", 14);
+                btnS.size = [30, 16];
+                styleBtn(btnS, "S", "pill", 16);
                 btnS.helpTip = "Apply Stroke color";
                 btnS.onClick = (function (idx) {
                     return function () {

@@ -2,6 +2,14 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.4
+
+### 🎨 Visual Precision Refinements
+- **Perfect Rounded Corners:** Fixed an issue where the native After Effects panel background color was bleeding into the `clearBrush` of rounded buttons, creating dark corner artifacts. The panel now strictly enforces `#141518` background to match Figma.
+- **Circular Checkboxes:** Reverted "Round", "Double", and "Rev" checkboxes back to true perfect circles (`radius=7`) as intended in the Figma design.
+- **Anchor Grid Active Dot:** The active Anchor grid icon now correctly renders as a bold centered vector circle (`radius=3.5`) instead of a tiny character.
+- **Swatch Layout Tweaks:** Increased Swatch boxes to `30x22` and Pill buttons to `30x16` for better touch density and readability.
+
 ## 1.8.3
 
 ### 🐛 Visual Hotfix

@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.11";
+    var _buildVersion     = "1.8.12";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -43,7 +43,8 @@
     // ============================================================
     var fillColors = ["#E63946", "#F1FAEE", "#A8DADC", "#457B9D", "#1D3557"];
     var strokeColors = ["#1D3557", "#457B9D", "#A8DADC", "#F1FAEE", "#E63946"];
-    var savedColIndex = 4; // default 5 cols
+    var savedSwatchCols = 5;                                  // swatches per row (1-6)
+    var SWATCH_COL_OPTIONS = ["1", "2", "3", "4", "5", "6"];
 
     function isHexColor(s) { return typeof s === "string" && /^#[0-9A-Fa-f]{6}$/.test(s); }
 
@@ -70,9 +71,14 @@
         if (app.settings.haveSetting(_settingsSection, "StrokeColors")) {
             strokeColors = app.settings.getSetting(_settingsSection, "StrokeColors").split(",");
         }
-        if (app.settings.haveSetting(_settingsSection, "ColIndex")) {
-            var savedCols = parseInt(app.settings.getSetting(_settingsSection, "ColIndex"), 10);
-            savedColIndex = (savedCols >= 0 && savedCols <= 5) ? savedCols : 4;
+        // 1.8.11 and earlier saved the dropdown's *index*; the count is saved now,
+        // so an out-of-range index can never leave the Col menu blank again.
+        if (app.settings.haveSetting(_settingsSection, "SwatchCols")) {
+            var savedCols = parseInt(app.settings.getSetting(_settingsSection, "SwatchCols"), 10);
+            if (savedCols >= 1 && savedCols <= 6) savedSwatchCols = savedCols;
+        } else if (app.settings.haveSetting(_settingsSection, "ColIndex")) {
+            var oldIdx = parseInt(app.settings.getSetting(_settingsSection, "ColIndex"), 10);
+            if (oldIdx >= 0 && oldIdx <= 5) savedSwatchCols = oldIdx + 1;
         }
     } catch (eSettings) {}
     (function () {
@@ -84,7 +90,7 @@
     function saveSwatchSettings() {
         app.settings.saveSetting(_settingsSection, "FillColors", fillColors.join(","));
         app.settings.saveSetting(_settingsSection, "StrokeColors", strokeColors.join(","));
-        app.settings.saveSetting(_settingsSection, "ColIndex", savedColIndex.toString());
+        app.settings.saveSetting(_settingsSection, "SwatchCols", savedSwatchCols.toString());
     }
 
     /** Set a value, or add a keyframe at `time` when the property is already animated. */
@@ -2804,37 +2810,70 @@
         // ============================================================
         // ---- Top Header Bar ----
         // ============================================================
+        /** Opens a URL in the browser: a ScriptUI statictext cannot be a real link. */
+        function openURL(url) {
+            try {
+                system.callSystem(isWindowsOS() ? 'cmd /c start "" "' + url + '"' : 'open "' + url + '"');
+                return;
+            } catch (e) {}
+            try { new File(url).execute(); } catch (e2) {}
+        }
+
         var topBar = win.add("group");
         topBar.orientation = "row";
-        topBar.alignChildren = ["fill", "center"];
-        topBar.spacing = 6;
+        // "left", never "fill": "fill" stretches every label (even the dot) and
+        // spreads the whole bar out instead of keeping the two clusters at the edges.
+        topBar.alignChildren = ["left", "center"];
+        topBar.spacing = 0;
         topBar.margins = [0, 0, 0, 4];
 
-        // Glowing Blue Dot
-        var dot = topBar.add("statictext", undefined, "●");
+        // -- Left cluster: dot + title, tight together --
+        var brandGrp = topBar.add("group");
+        brandGrp.orientation = "row";
+        brandGrp.alignChildren = ["left", "center"];
+        brandGrp.spacing = 4;
+        brandGrp.margins = 0;
+
+        var dot = brandGrp.add("statictext", undefined, "●");
         dot.graphics.font = ScriptUI.newFont("sans", "BOLD", 10);
+        dot.preferredSize.width = 10;
         try { dot.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.accent, 1); } catch (eD) {}
 
-        var titleTxt = topBar.add("statictext", undefined, _scriptName);
+        var titleTxt = brandGrp.add("statictext", undefined, _scriptName);
         titleTxt.graphics.font = ScriptUI.newFont("sans", "BOLD", 11);
         try { titleTxt.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, [0.83, 0.85, 0.91, 1], 1); } catch (e) {}
 
+        // -- Flexible gap: everything after it sits on the right edge --
         var topSpacer = topBar.add("group");
         topSpacer.alignment = ["fill", "center"];
+        topSpacer.minimumSize.width = 8;
 
-        var authorTxt = topBar.add("statictext", undefined, "Made by Raisul Sohan");
-        authorTxt.graphics.font = ScriptUI.newFont("sans", "REGULAR", 9);
-        try { authorTxt.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
+        // -- Right cluster: credit, version, menu dots --
+        var metaGrp = topBar.add("group");
+        metaGrp.orientation = "row";
+        metaGrp.alignChildren = ["right", "center"];
+        metaGrp.spacing = 5;
+        metaGrp.margins = 0;
 
-        // Version badge pill
-        var verPill = topBar.add("statictext", undefined, "v" + _buildVersion.replace(/\.0$/, ""));
+        var madeTxt = metaGrp.add("statictext", undefined, "Made by");
+        madeTxt.graphics.font = ScriptUI.newFont("sans", "REGULAR", 9);
+        try { madeTxt.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
+
+        var authorLink = metaGrp.add("statictext", undefined, _scriptAuthor);
+        authorLink.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
+        authorLink.helpTip = _authorWebsite;
+        try { authorLink.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.activeText, 1); } catch (eA) {}
+        authorLink.addEventListener("mousedown", function () { openURL(_authorWebsite); });
+
+        var verPill = metaGrp.add("statictext", undefined, "v" + _buildVersion.replace(/\.0$/, ""));
         verPill.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
         try { verPill.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (eV) {}
 
-        // Subtle menu dots
-        var dots = topBar.add("statictext", undefined, "••");
+        var dots = metaGrp.add("statictext", undefined, "••");
         dots.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
+        dots.helpTip = _authorWebsite;
         try { dots.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.borderMedium, 1); } catch (eM) {}
+        dots.addEventListener("mousedown", function () { openURL(_authorWebsite); });
 
         // ============================================================
         // ---- 1. Motion Tools Section ----
@@ -3164,6 +3203,25 @@
         swatchCol.alignment = ["fill", "bottom"];
         registerColumnPair(fadeCol, swatchCol);
 
+        // ---- Dropdown helpers ----
+        /**
+         * Select the item with this text. Setting `selection` to an out-of-range
+         * index leaves it null and the closed list draws blank; this can only ever
+         * land on a real item.
+         */
+        function selectByText(list, text) {
+            var wanted = String(text);
+            for (var i = 0; i < list.items.length; i++) {
+                if (list.items[i].text === wanted) { list.selection = i; return; }
+            }
+            list.selection = list.items.length - 1;
+        }
+
+        function dropdownNumber(list, fallback) {
+            var n = (list && list.selection) ? parseInt(list.selection.text, 10) : NaN;
+            return (n >= 1) ? n : fallback;
+        }
+
         var swCtrlRow = swatchCol.add("group");
         swCtrlRow.orientation = "row";
         swCtrlRow.alignChildren = ["left", "center"];
@@ -3174,68 +3232,96 @@
         totLbl.graphics.font = ScriptUI.newFont("sans", "REGULAR", 9);
         try { totLbl.graphics.foregroundColor = swatchCol.graphics.newPen(swatchCol.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
         var swTotalDrop = swCtrlRow.add("dropdownlist", undefined, ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
-        swTotalDrop.selection = Math.min(Math.max(0, fillColors.length - 1), 9);
-        swTotalDrop.preferredSize = [42, 20];
+        swTotalDrop.preferredSize = [46, 20];
+        swTotalDrop.helpTip = "How many swatches the palette has";
+        selectByText(swTotalDrop, fillColors.length);
 
         var colLbl = swCtrlRow.add("statictext", undefined, "Col:");
         colLbl.graphics.font = ScriptUI.newFont("sans", "REGULAR", 9);
         try { colLbl.graphics.foregroundColor = swatchCol.graphics.newPen(swatchCol.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
-        var swColDrop = swCtrlRow.add("dropdownlist", undefined, ["1", "2", "3", "4", "5", "6"]);
-        swColDrop.selection = (savedColIndex >= 0 && savedColIndex <= 5) ? savedColIndex : 4;
-        swColDrop.preferredSize = [38, 20];
+        var swColDrop = swCtrlRow.add("dropdownlist", undefined, SWATCH_COL_OPTIONS);
+        swColDrop.preferredSize = [46, 20];
+        swColDrop.helpTip = "Swatches per row (fewer are used when the panel is too narrow)";
+        selectByText(swColDrop, savedSwatchCols);
 
         var swContainer = swatchCol.add("group");
         swContainer.orientation = "column";
         swContainer.alignChildren = ["left", "top"];
         swContainer.alignment = ["left", "top"];
-        swContainer.spacing = 3;
+        swContainer.spacing = SW_GAP;
+        swContainer.margins = 0;
 
         var activeSwatchIdx = 0;
+        var swatchButtons = [];  // every drawn block, for one repaint pass
+        var buildingUI = true;   // no re-layout while the panel is still being built
+        var lastFitCols = 0;
+
+        /** min = preferred = max: layout() cannot resize a swatch block afterwards. */
+        function lockSize(ctrl, w, h) {
+            ctrl.minimumSize   = [w, h];
+            ctrl.preferredSize = [w, h];
+            ctrl.maximumSize   = [w, h];
+        }
+
+        function repaintSwatches() {
+            for (var i = 0; i < swatchButtons.length; i++) {
+                try { swatchButtons[i].notify("onDraw"); } catch (e) {}
+            }
+        }
+
+        /** How many swatch blocks fit across the swatch column at its current width. */
+        function swatchFitCols() {
+            return Math.max(1, Math.floor((lastColW + SW_GAP) / (SW_W + SW_GAP)));
+        }
+
+        function swatchCols() {
+            return Math.min(dropdownNumber(swColDrop, 5), swatchFitCols());
+        }
 
         function renderSwatches() {
-            while (swContainer.children.length > 0) {
-                swContainer.remove(swContainer.children[0]);
-            }
+            while (swContainer.children.length > 0) swContainer.remove(swContainer.children[0]);
+            swatchButtons = [];
 
-            var wantCols = (swColDrop.selection && swColDrop.selection.text) ? (parseInt(swColDrop.selection.text, 10) || 5) : 5;
-            var fitCols = Math.max(1, Math.floor((lastColW + SW_GAP) / (SW_W + SW_GAP)));
-            var currentCols = Math.min(wantCols, fitCols);
+            var cols = swatchCols();
+            lastFitCols = cols;
             var curRowGrp = null;
 
             for (var i = 0; i < fillColors.length; i++) {
-                if (i % currentCols === 0) {
+                if (i % cols === 0) {
                     curRowGrp = swContainer.add("group");
                     curRowGrp.orientation = "row";
                     curRowGrp.alignChildren = ["left", "top"];
                     curRowGrp.alignment = ["left", "top"];
                     curRowGrp.spacing = SW_GAP;
+                    curRowGrp.margins = 0;
                 }
 
                 var colBox = curRowGrp.add("group");
                 colBox.orientation = "column";
                 colBox.alignChildren = ["center", "top"];
                 colBox.spacing = 2;
+                colBox.margins = 0;
 
-                // Rounded Color swatch block
+                // Rounded colour block
                 var fillIcn = colBox.add("iconbutton", undefined, undefined);
-                fillIcn.size = [SW_W, 22];
+                lockSize(fillIcn, SW_W, 22);
+                fillIcn.helpTip = "Click to pick this swatch's colour";
                 fillIcn.onDraw = (function (idx) {
                     return function () {
                         var g = this.graphics;
                         var w = this.size[0], ht = this.size[1];
                         var isAct = (idx === activeSwatchIdx);
-                        
+
                         var clear = g.newBrush(g.BrushType.SOLID_COLOR, C.bgPanel);
                         g.rectPath(0, 0, w, ht); g.fillPath(clear);
-                        
+
                         var brd = g.newBrush(g.BrushType.SOLID_COLOR, isAct ? C.accent : C.borderSubtle);
                         var bg = g.newBrush(g.BrushType.SOLID_COLOR, hexToAeColor(fillColors[idx]));
-                        
+
                         fillRoundRect(g, brd, 0, 0, w, ht, 3);
                         fillRoundRect(g, bg, (isAct ? 2 : 1), (isAct ? 2 : 1), w - (isAct ? 4 : 2), ht - (isAct ? 4 : 2), (isAct ? 1 : 2));
                     };
                 })(i);
-
                 fillIcn.onClick = (function (idx) {
                     return function () {
                         activeSwatchIdx = idx;
@@ -3244,42 +3330,51 @@
                             fillColors[idx] = decToHex(picked);
                             saveSwatchSettings();
                         }
-                        renderSwatches();
+                        repaintSwatches();
                     };
                 })(i);
+                swatchButtons.push(fillIcn);
 
-                // 'F' Pill Button
+                // 'F' pill
                 var btnF = colBox.add("iconbutton", undefined, undefined);
-                btnF.size = [SW_W, 16];
                 styleBtn(btnF, "F", "pill", 16);
+                lockSize(btnF, SW_W, 16);
                 btnF.helpTip = "Apply Fill color";
                 btnF.onClick = (function (idx) {
                     return function () {
                         activeSwatchIdx = idx;
-                        renderSwatches();
+                        repaintSwatches();
                         applySwatchColor(fillColors[idx], "Fill");
                     };
                 })(i);
+                swatchButtons.push(btnF);
 
-                // 'S' Pill Button
+                // 'S' pill
                 var btnS = colBox.add("iconbutton", undefined, undefined);
-                btnS.size = [SW_W, 16];
                 styleBtn(btnS, "S", "pill", 16);
+                lockSize(btnS, SW_W, 16);
                 btnS.helpTip = "Apply Stroke color";
                 btnS.onClick = (function (idx) {
                     return function () {
                         activeSwatchIdx = idx;
-                        renderSwatches();
+                        repaintSwatches();
                         applySwatchColor(strokeColors[idx], "Stroke");
                     };
                 })(i);
+                swatchButtons.push(btnS);
             }
 
-            try { win.layout.layout(true); } catch (e) {}
+            if (!buildingUI) {
+                try {
+                    win.layout.layout(true);
+                    win.layout.resize();
+                } catch (eLay) {}
+            }
+            repaintSwatches();
         }
 
         swTotalDrop.onChange = function () {
-            var newLen = parseInt(this.selection.text, 10);
+            var newLen = dropdownNumber(this, fillColors.length);
             var oldLen = fillColors.length;
             if (newLen > oldLen) {
                 for (var j = oldLen; j < newLen; j++) {
@@ -3290,12 +3385,13 @@
                 fillColors.splice(newLen, oldLen - newLen);
                 strokeColors.splice(newLen, oldLen - newLen);
             }
+            if (activeSwatchIdx >= fillColors.length) activeSwatchIdx = fillColors.length - 1;
             saveSwatchSettings();
             renderSwatches();
         };
 
         swColDrop.onChange = function () {
-            savedColIndex = this.selection.index;
+            savedSwatchCols = dropdownNumber(this, 5);
             saveSwatchSettings();
             renderSwatches();
         };
@@ -3303,29 +3399,36 @@
         syncColumns();
         renderSwatches();
 
-        var footer = win.add("statictext", undefined, "v" + _buildVersion.replace(/\.0$/, "") + " • Developed By RaisulSohan • raisulsohan.com");
-        footer.graphics.font = ScriptUI.newFont("sans", "ITALIC", 8);
-        footer.alignment = ["center", "bottom"];
-        try { footer.graphics.foregroundColor = win.graphics.newPen(win.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (eF) {}
-
+        var inResize = false;
         win.onResizing = win.onResize = function () {
+            if (inResize) return;
+            inResize = true;
             try {
                 syncColumns();
-                this.layout.resize();
-            } catch (eR) {}
+                // Rewrap the swatch grid only when the number that fits changed.
+                if (swatchCols() !== lastFitCols) {
+                    renderSwatches();
+                } else {
+                    this.layout.resize();
+                    repaintSwatches();
+                }
+            } catch (eR) {
+            } finally {
+                inResize = false;
+            }
         };
 
         if (win instanceof Window) {
             win.center();
             win.show();
-            syncColumns();
-            win.layout.layout(true);
-            win.layout.resize();
+            syncColumns();          // the real width is known only after show()
+            buildingUI = false;
+            renderSwatches();
         } else {
-            win.layout.layout(true);
+            win.layout.layout(true); // docked panel: get its real width first
             syncColumns();
-            win.layout.layout(true);
-            win.layout.resize();
+            buildingUI = false;
+            renderSwatches();
         }
 
         return win;

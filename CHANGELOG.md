@@ -2,6 +2,15 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.12
+
+### ✨ Header Bar Link, Repaint Performance & Robust Swatch Wrapping
+- **Interactive Header Bar:** Redesigned header with edge clustering (brand group on left, credits on right). Author name and menu dots are interactive links that launch `https://raisulsohan.com` via system browser.
+- **Removed Bottom Footer:** Eliminated the redundant bottom credit line to maximize usable vertical workspace.
+- **Count-Based Swatch Persistence:** Migrated setting storage from index-based `ColIndex` to count-based `SwatchCols` (1–6) with automatic legacy migration and `selectByText()` fallback, eliminating blank dropdown states.
+- **Non-Destructive Color Picking (`repaintSwatches`):** Picking colors now triggers a fast in-place canvas repaint (`notify("onDraw")`) without destroying and rebuilding UI hierarchy. Swatch blocks have locked geometric dimensions via `lockSize`.
+- **Throttled Resize Handling:** Swatch container dynamically re-wraps only when the fitting column count changes on panel resizing, with reentrancy protection (`inResize` guard).
+
 ## 1.8.11
 
 ### 📐 Pixel-Perfect 50/50 Column Geometry & Swatch Width Synchronization

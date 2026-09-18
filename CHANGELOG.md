@@ -2,6 +2,11 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.1
+
+### 🐛 Bug Fix
+- Fixed ScriptUI runtime error in After Effects (`UI element type 'customControl' is unknown or invalid in this context`) by replacing non-standard controls with native ScriptUI `panel` dividers and `statictext` elements.
+
 ## 1.8.0
 
 ### 🎨 Modern Figma / React Dark Theme UI

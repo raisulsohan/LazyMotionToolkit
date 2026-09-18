@@ -50,7 +50,7 @@
             check("panel: LazyStrike FX button", !!findText(win, "⚡ LazyStrike FX"));
             check("panel: LazyPreview Render section", !!findText(win, "🎬 LazyPreview Render"));
             check("panel: Render button", !!findText(win, "▶ Render In→Out"));
-            check("panel: version in footer", !!findText(win, "v1.6 • Developed By RaisulSohan • raisulsohan.com"));
+            check("panel: version in footer", !!findText(win, "v" + api.version.replace(/\.0$/, "") + " • Developed By RaisulSohan • raisulsohan.com"));
         }
 
         try {

@@ -2,6 +2,20 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.7.0
+
+### 📐 Compact Two-Column UI & Collapsible Sections
+- **Two-Column Pairing:**
+  - Head to Line and 9-Point Anchor Point & Align arranged side-by-side in a single row.
+  - Fade Animator Pro and Quick Swatch arranged side-by-side in a single row.
+  - Symmetrical height matching (~85px) for both columns, eliminating dead space.
+- **Collapsible Accordion Sections:**
+  - Added toggle controls (`▾`/`▸`) to collapse and expand Motion Tools, Preview Render, Head+Anchor, and Fade+Swatch sections.
+  - Open/collapsed state persists across After Effects restarts via `app.settings`.
+- **Vertical Height Reduction:**
+  - Panel vertical footprint reduced by ~40% so all controls remain visible and fully functional when docked.
+  - Tighter margins (6px) and spacing (4px) with compact control dimensions.
+
 ## 1.6.0
 
 Checked inside After Effects 2026 (26.5): `tools/ae-smoke-test.jsx`, `tools/ae-ui-test-audio.jsx`, `tools/ae-ui-test-panel.jsx`; offline with `tools/test-toolkit.js`.

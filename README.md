@@ -20,13 +20,15 @@
   <a href="#-author--credits">Credits</a>
 </p>
 
-Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.6** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.7** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
 
 ---
 
-## 🆕 What's New in 1.6
+## 🆕 What's New in 1.7
 
-Two tools that used to be separate scripts are now part of the panel, fixed along the way. Everything was checked inside After Effects 2026 (26.5).
+- **Compact Modern Two-Column Layout:** Head to Line paired side-by-side with 9-Point Anchor Point, and Fade Animator Pro paired side-by-side with Quick Swatch. Total vertical height reduced by ~40%, ensuring all controls remain visible when docked in narrow or short panels.
+- **Collapsible Accordion Sections:** Every section can be collapsed/expanded with compact toggle controls (`▾`/`▸`). Open/closed state persists across After Effects sessions.
+- **Optimized Spacing:** Tighter margins (6px) and spacing (4px) with balanced column proportions.
 
 - **⚡ LazyStrike FX** (was *QuickStrike FX*): lightning bolts, flashes and sky flashes, by timing or driven by audio.
   - Effect settings are found by match name, so it works in any After Effects language.

@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.14";
+    var _buildVersion     = "1.8.15";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -969,9 +969,8 @@
                     : (style.unit === "lines") ? BASED_ON.lines : BASED_ON.chars;
         var soft = style.soft && o.band > 0;
 
-        var txtLyr = comp.layer(tempName);
         // 1. Hide everything past the caret, so the text types itself on.
-        var hide = addTextAnimator(txtLyr, TYPE_HIDE);
+        var hide = addTextAnimator(comp.layer(tempName), TYPE_HIDE);
         animatorProps(hide).addProperty("ADBE Text Opacity").setValue(0);
         var hideSel = addRangeSelector(hide);
         setSelectorValue(hideSel, RANGE.basedOn, basedOn);
@@ -982,10 +981,9 @@
 
         if (!soft) return;
 
-        txtLyr = comp.layer(tempName);
         // 2. The few units at the caret arrive offset, blurred and transparent, and
         //    land as the caret moves on. This is the part that stops it looking flat.
-        var settle = addTextAnimator(txtLyr, TYPE_SETTLE);
+        var settle = addTextAnimator(comp.layer(tempName), TYPE_SETTLE);
         var sp = animatorProps(settle);
         var look = AUTOBOX_SETTLES[o.settle] || AUTOBOX_SETTLES[0];
         try { sp.addProperty("ADBE Text Opacity").setValue(0); } catch (eO) {}
@@ -1102,9 +1100,8 @@
 
     function createAutoBox(comp, tempName, o, origName) {
         var style = AUTOBOX_STYLES[o.style] || AUTOBOX_STYLES[0];
-        
-        var txtLyr = comp.layer(tempName);
-        var doc = txtLyr.property("ADBE Text Properties").property("ADBE Text Document").value;
+
+        var doc = comp.layer(tempName).property("ADBE Text Properties").property("ADBE Text Document").value;
         var fontSize = 50;
         try { if (doc.fontSize > 0) fontSize = doc.fontSize; } catch (eFs) {}
         var band = (style.band !== undefined) ? style.band : o.band;
@@ -1114,19 +1111,22 @@
 
         var wantsReveal = !style.noReveal;
         if (wantsReveal) {
-            txtLyr = comp.layer(tempName);
-            var revealFx = addSliderControl(txtLyr, FX_REVEAL, 0);
-            addSliderControl(txtLyr, FX_BAND, Math.max(0, band));
-            var reveal = revealFx.property(1);
+            // Each addSliderControl invalidates prior layer refs in some AE builds,
+            // so we re-fetch the layer by name for every call.
+            addSliderControl(comp.layer(tempName), FX_REVEAL, 0);
+            addSliderControl(comp.layer(tempName), FX_BAND, Math.max(0, band));
+
+            // Re-fetch the effect we just added to set keyframes on it.
+            var reveal = findEffectByName(comp.layer(tempName), FX_REVEAL).property(1);
             var units = countUnits(doc.text, style.unit);
             var frames = opts.timingPerUnit
                 ? Math.min(opts.maxFrames, Math.max(2, Math.round(units * opts.framesPerUnit)))
                 : Math.max(2, Math.round(opts.totalFrames));
-            var startTime = opts.atPlayhead ? comp.time : txtLyr.inPoint;
+            var startTime = opts.atPlayhead ? comp.time : comp.layer(tempName).inPoint;
             reveal.setValueAtTime(startTime, 0);
             reveal.setValueAtTime(startTime + frames / comp.frameRate, 100);
             applyRevealEase(reveal, opts.ease);
-            
+
             createMeasureLayer(comp, tempName, style.unit, origName);
         }
 
@@ -1141,36 +1141,47 @@
         var skipped = [];
         app.beginUndoGroup("LazyMotion: Auto Box");
         try {
+            // Capture layer indices first — the layers array from comp.selectedLayers
+            // holds live references that go stale after any DOM mutation.
             var uniqueId = "LM_TEMP_" + new Date().getTime() + "_";
             var targets = [];
             for (var i = 0; i < layers.length; i++) {
-                var layer = layers[i];
-                if (!(layer instanceof TextLayer)) {
-                    skipped.push(layer.name + " (not a text layer)");
+                if (!(layers[i] instanceof TextLayer)) {
+                    skipped.push(layers[i].name + " (not a text layer)");
                     continue;
                 }
-                var origName = layer.name;
-                var tempName = uniqueId + i;
-                layer.name = tempName;
-                targets.push({ origName: origName, tempName: tempName });
+                targets.push({ origName: layers[i].name, idx: layers[i].index });
+            }
+            // Rename using index (most stable accessor, never invalidated)
+            for (var r = 0; r < targets.length; r++) {
+                var tempName = uniqueId + r;
+                comp.layer(targets[r].idx).name = tempName;
+                targets[r].tempName = tempName;
             }
 
+            // Now build the rig for each target
             for (var t = 0; t < targets.length; t++) {
                 try {
-                    made.push(createAutoBox(comp, targets[t].tempName, o, targets[t].origName));
+                    var boxLayer = createAutoBox(comp, targets[t].tempName, o, targets[t].origName);
+                    made.push(targets[t].origName + BOX_TAG);
                 } catch (eLayer) {
                     skipped.push(targets[t].origName + " (" + eLayer.name + ": " + eLayer.message + ")");
                 }
             }
 
-            for (var t = 0; t < targets.length; t++) {
-                var restored = comp.layer(targets[t].tempName);
-                if (restored) restored.name = targets[t].origName;
+            // Restore original names
+            for (var u = 0; u < targets.length; u++) {
+                try {
+                    comp.layer(targets[u].tempName).name = targets[u].origName;
+                } catch (eRestore) {}
             }
 
+            // Select the box layers by name (never use stale layer references)
             try {
                 for (var s = 1; s <= comp.numLayers; s++) comp.layer(s).selected = false;
-                for (var m = 0; m < made.length; m++) made[m].selected = true;
+                for (var m = 0; m < made.length; m++) {
+                    try { comp.layer(made[m]).selected = true; } catch (eS) {}
+                }
             } catch (eSel) {}
         } finally {
             app.endUndoGroup();

@@ -2,6 +2,12 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.15
+
+### 🐛 Bug Fixes
+- **Auto Box: Zero Cached Layer References:** Completely eliminated all cached `textLayer` / `txtLyr` references from the Auto Box engine. Every layer access now goes through `comp.layer(tempName)` inline so that AE's aggressive DOM invalidation after `addShape()`, `duplicate()`, `addProperty()`, or `addSliderControl()` can never produce a stale object. This definitively fixes the `ReferenceError: Object is invalid` crash on all AE versions.
+- **Stable Layer Capture:** Entry point now captures layer indices before any mutation instead of relying on `comp.selectedLayers` array references, and selects created box layers by name instead of by stored object reference.
+
 ## 1.8.14
 
 ### 🐛 Bug Fixes

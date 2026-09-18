@@ -49,6 +49,8 @@ function fail(message) {
 function downloadsFolder() {
   if (process.env.LAZYMOTION_DOWNLOAD_DIR) return process.env.LAZYMOTION_DOWNLOAD_DIR;
   for (let dir = dirname(root); ; dir = dirname(dir)) {
+    const candidateDot = join(dir, "00. Install from here");
+    if (existsSync(candidateDot)) return candidateDot;
     const candidate = join(dir, DOWNLOAD_FOLDER_NAME);
     if (existsSync(candidate)) return candidate;
     if (dirname(dir) === dir) break;

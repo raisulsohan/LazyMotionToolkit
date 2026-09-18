@@ -2572,73 +2572,111 @@
 
         win.orientation = "column";
         win.alignChildren = ["fill", "top"];
-        win.spacing = 8;
-        win.margins = 8;
+        win.spacing = 4;
+        win.margins = 6;
 
-        // ---- Header Bar ----
+        // ---- UI Helpers ----
+
+        /** Collapsible section: compact header row toggles its content body. */
+        function makeSection(title, settingsKey, defaultOpen) {
+            var key = "Section_" + settingsKey;
+            var isOpen = defaultOpen !== false;
+            try {
+                if (typeof app !== "undefined" && app.settings && app.settings.haveSetting(_settingsSection, key)) {
+                    isOpen = app.settings.getSetting(_settingsSection, key) !== "0";
+                }
+            } catch (eH) {}
+
+            var hdr = win.add("group");
+            hdr.orientation = "row";
+            hdr.alignChildren = ["left", "center"];
+            hdr.spacing = 4;
+            hdr.margins = [0, 2, 0, 0];
+
+            var tglBtn = hdr.add("button", undefined, isOpen ? "\u25BE" : "\u25B8");
+            tglBtn.preferredSize = [18, 16];
+
+            var titleTxt = hdr.add("statictext", undefined, title);
+            titleTxt.graphics.font = ScriptUI.newFont("sans", "BOLD", 11);
+
+            var body = win.add("group");
+            body.orientation = "column";
+            body.alignChildren = ["fill", "top"];
+            body.spacing = 3;
+            body.margins = [2, 0, 2, 2];
+            body.visible = isOpen;
+
+            function toggle() {
+                isOpen = !isOpen;
+                body.visible = isOpen;
+                tglBtn.text = isOpen ? "\u25BE" : "\u25B8";
+                try {
+                    if (typeof app !== "undefined" && app.settings) {
+                        app.settings.saveSetting(_settingsSection, key, isOpen ? "1" : "0");
+                    }
+                } catch (eS) {}
+                win.layout.layout(true);
+                win.layout.resize();
+            }
+
+            tglBtn.onClick = toggle;
+
+            return body;
+        }
+
+        // ---- Header ----
         var header = win.add("group");
         header.orientation = "row";
         header.alignChildren = ["left", "center"];
+        header.margins = [0, 0, 0, 2];
         var titleTxt = header.add("statictext", undefined, "⚡ " + _scriptName);
         titleTxt.graphics.font = ScriptUI.newFont("sans", "BOLD", 12);
 
-        // ---- 1. Layer & Comp Tools Panel ----
-        var toolsPnl = win.add("panel", undefined, "Motion Tools");
-        toolsPnl.orientation = "column";
-        toolsPnl.alignChildren = ["fill", "center"];
-        toolsPnl.spacing = 6;
-        toolsPnl.margins = [8, 10, 8, 8];
+        // ==== Section 1: Motion Tools ====
+        var sec1 = makeSection("Motion Tools", "MotionTools");
 
-        var precompRow = toolsPnl.add("group");
+        var precompRow = sec1.add("group");
         precompRow.orientation = "row";
         precompRow.alignChildren = ["fill", "center"];
-        precompRow.spacing = 6;
-
+        precompRow.spacing = 4;
         var btnPrecompIndiv = precompRow.add("button", undefined, "📦 Precomp (1:1)");
         btnPrecompIndiv.helpTip = "Smart Crop & Precompose Each Selected Layer Separately";
         btnPrecompIndiv.onClick = executeIndividualPrecomp;
-
         var btnPrecompGroup = precompRow.add("button", undefined, "📁 Precomp (Group)");
         btnPrecompGroup.helpTip = "Precompose All Selected Layers Combined into ONE Single Precomp";
         btnPrecompGroup.onClick = executeGroupPrecomp;
 
-        var boxGridRow = toolsPnl.add("group");
+        var boxGridRow = sec1.add("group");
         boxGridRow.orientation = "row";
         boxGridRow.alignChildren = ["fill", "center"];
-        boxGridRow.spacing = 6;
-
+        boxGridRow.spacing = 4;
         var btnAutoBox = boxGridRow.add("button", undefined, "📝 Auto Box");
         btnAutoBox.helpTip = "Create Pixel-Perfect Auto-Resizing Background Box for Text Layer";
         btnAutoBox.onClick = executeAutoBoxMaker;
-
         var btnGrid = boxGridRow.add("button", undefined, "⊞ Grid Maker");
         btnGrid.helpTip = "Open Grid Designer to create Rows, Columns, and Layouts";
         btnGrid.onClick = showGridMakerDialog;
 
-        var btnStrike = toolsPnl.add("button", undefined, "⚡ LazyStrike FX");
+        var btnStrike = sec1.add("button", undefined, "⚡ LazyStrike FX");
         btnStrike.helpTip = "Lightning bolts, flashes and sky flashes — by timing or driven by audio";
         btnStrike.onClick = showLazyStrikeDialog;
 
-        // ---- LazyPreview Render ----
-        var previewPnl = win.add("panel", undefined, "🎬 LazyPreview Render");
-        previewPnl.orientation = "column";
-        previewPnl.alignChildren = ["fill", "top"];
-        previewPnl.spacing = 6;
-        previewPnl.margins = [8, 10, 8, 8];
+        // ==== Section 2: LazyPreview Render ====
+        var sec2 = makeSection("Preview Render", "Preview");
 
-        var previewRow = previewPnl.add("group");
+        var previewRow = sec2.add("group");
         previewRow.orientation = "row";
         previewRow.alignChildren = ["fill", "center"];
-        previewRow.spacing = 6;
+        previewRow.spacing = 4;
         var btnRender = previewRow.add("button", undefined, "▶ Render In→Out");
         btnRender.helpTip = "Saves the project, renders the work area (B / N) to H.264 in the background, and puts it on top as a solo'd preview layer for smooth playback";
         var btnTogglePreview = previewRow.add("button", undefined, "Toggle");
         btnTogglePreview.helpTip = "Switch between the rendered preview and the live composition";
         var btnRemovePreview = previewRow.add("button", undefined, "Remove");
         btnRemovePreview.helpTip = "Delete the preview layer and its rendered file";
-        previewStatusText = previewPnl.add("statictext", undefined, "Set the work area (B / N), then render.");
+        previewStatusText = sec2.add("statictext", undefined, "Set the work area (B / N), then render.");
         previewStatusText.alignment = ["fill", "top"];
-        try { deletePreviewFiles(null); } catch (ePending) {} // files After Effects let go of since last time
+        try { deletePreviewFiles(null); } catch (ePending) {}
 
         btnRender.onClick = function () {
             var problem = startPreviewRender(app.project.activeItem);
@@ -2657,8 +2695,8 @@
             } finally {
                 app.endUndoGroup();
             }
-            if (on === null) return alert("No preview layer in this composition.\nClick Render In→Out first.");
-            setPreviewStatus(on ? "✓ Preview ON" : "○ Preview OFF (showing the composition)");
+            if (on === null) return alert("No preview layer in this composition.\nClick Render In\u2192Out first.");
+            setPreviewStatus(on ? "\u2713 Preview ON" : "\u25CB Preview OFF (showing the composition)");
         };
         btnRemovePreview.onClick = function () {
             var comp = app.project.activeItem;
@@ -2674,49 +2712,48 @@
             setPreviewStatus("Preview removed.");
         };
 
-        // ---- 2. Head to Line (Animated Arrows) Panel ----
-        var headPnl = win.add("panel", undefined, "🏹 Head to Line");
-        headPnl.orientation = "column";
-        headPnl.alignChildren = ["fill", "top"];
-        headPnl.spacing = 6;
-        headPnl.margins = [8, 10, 8, 8];
+        // ==== Section 3: Head to Line + Anchor Point (side by side) ====
+        var sec3 = makeSection("Head to Line  \u00B7  Anchor", "HeadAnchor");
 
-        // Head Sub-Panel
-        var headSub = headPnl.add("panel", undefined, "Head:");
-        headSub.orientation = "column";
-        headSub.alignChildren = ["fill", "top"];
-        headSub.spacing = 4;
+        var twoCol1 = sec3.add("group");
+        twoCol1.orientation = "row";
+        twoCol1.alignChildren = ["fill", "top"];
+        twoCol1.spacing = 6;
 
-        var headTypeRow = headSub.add("group");
+        // -- Left: Head to Line --
+        var headCol = twoCol1.add("group");
+        headCol.orientation = "column";
+        headCol.alignChildren = ["fill", "top"];
+        headCol.spacing = 3;
+
+        var headTypeRow = headCol.add("group");
         headTypeRow.orientation = "row";
+        headTypeRow.alignChildren = ["left", "center"];
+        headTypeRow.spacing = 4;
         headTypeRow.add("statictext", undefined, "Type:");
         var dropHeadType = headTypeRow.add("dropdownlist", undefined, [
-            "Triangle", "Circle", "Star", "Rectangle", "Pentagon", "Hexagon", "Heptagon", "Octagon"
+            "Triangle", "Circle", "Star", "Rectangle",
+            "Pentagon", "Hexagon", "Heptagon", "Octagon"
         ]);
         dropHeadType.selection = 0;
-        dropHeadType.preferredSize.width = 130;
+        dropHeadType.preferredSize.width = 95;
 
-        var chkRoundCorners = headSub.add("checkbox", undefined, "Round Corners");
-        var chkDoubleSided = headSub.add("checkbox", undefined, "Double-Sided");
+        var headOptsRow = headCol.add("group");
+        headOptsRow.orientation = "row";
+        headOptsRow.spacing = 6;
+        var chkRoundCorners = headOptsRow.add("checkbox", undefined, "Round");
+        var chkDoubleSided = headOptsRow.add("checkbox", undefined, "Double");
 
-        // Line Sub-Panel
-        var lineSub = headPnl.add("panel", undefined, "Line:");
-        lineSub.orientation = "column";
-        lineSub.alignChildren = ["fill", "top"];
-        lineSub.spacing = 4;
-
-        var chkReverseDir = lineSub.add("checkbox", undefined, "Reverse Direction");
-
-        var animRow = lineSub.add("group");
-        animRow.orientation = "row";
-        var chkAnimate = animRow.add("checkbox", undefined, "Animate (f):");
+        var lineOptsRow = headCol.add("group");
+        lineOptsRow.orientation = "row";
+        lineOptsRow.spacing = 4;
+        var chkReverseDir = lineOptsRow.add("checkbox", undefined, "Rev");
+        var chkAnimate = lineOptsRow.add("checkbox", undefined, "Anim:");
         chkAnimate.value = true;
-        var inputAnimFrames = animRow.add("edittext", undefined, "30");
-        inputAnimFrames.characters = 4;
-        inputAnimFrames.preferredSize = [45, 20];
+        var inputAnimFrames = lineOptsRow.add("edittext", undefined, "30");
+        inputAnimFrames.characters = 3;
 
-        // Head it! button
-        var btnHeadIt = headPnl.add("button", undefined, "🎯 Head it!");
+        var btnHeadIt = headCol.add("button", undefined, "🎯 Head it!");
         btnHeadIt.helpTip = "Attach selected Head shape to line with path tracking & animation";
         btnHeadIt.onClick = function () {
             var hType = dropHeadType.selection.text;
@@ -2724,42 +2761,75 @@
             var dSided = chkDoubleSided.value;
             var rDir = chkReverseDir.value;
             var doAnim = chkAnimate.value;
-            var frames = parseInt(inputAnimFrames.text) || 30;
+            var frames = parseInt(inputAnimFrames.text, 10) || 30;
             executeHeadToLine(hType, rCorners, dSided, rDir, doAnim, frames);
         };
 
-        // ---- 3. Fade Tools Pro Panel ----
-        var fadePnl = win.add("panel", undefined, "🎨 Fade Animator Pro");
-        fadePnl.orientation = "column";
-        fadePnl.alignChildren = ["fill", "top"];
-        fadePnl.spacing = 6;
-        fadePnl.margins = [8, 10, 8, 8];
+        // -- Right: Anchor Point --
+        var anchorCol = twoCol1.add("group");
+        anchorCol.orientation = "column";
+        anchorCol.alignChildren = ["center", "top"];
+        anchorCol.spacing = 2;
 
-        var fParamsRow = fadePnl.add("group");
+        var aRow1 = anchorCol.add("group"); aRow1.spacing = 2;
+        var btnTL = aRow1.add("button", undefined, "◤"); btnTL.size = [26, 20]; btnTL.onClick = function () { alignAnchorPoint(0, 0); };
+        var btnTC = aRow1.add("button", undefined, "▲"); btnTC.size = [26, 20]; btnTC.onClick = function () { alignAnchorPoint(0.5, 0); };
+        var btnTR = aRow1.add("button", undefined, "◥"); btnTR.size = [26, 20]; btnTR.onClick = function () { alignAnchorPoint(1, 0); };
+
+        var aRow2 = anchorCol.add("group"); aRow2.spacing = 2;
+        var btnML = aRow2.add("button", undefined, "◀"); btnML.size = [26, 20]; btnML.onClick = function () { alignAnchorPoint(0, 0.5); };
+        var btnMC = aRow2.add("button", undefined, "●"); btnMC.size = [26, 20]; btnMC.onClick = function () { alignAnchorPoint(0.5, 0.5); };
+        var btnMR = aRow2.add("button", undefined, "▶"); btnMR.size = [26, 20]; btnMR.onClick = function () { alignAnchorPoint(1, 0.5); };
+
+        var aRow3 = anchorCol.add("group"); aRow3.spacing = 2;
+        var btnBL = aRow3.add("button", undefined, "◣"); btnBL.size = [26, 20]; btnBL.onClick = function () { alignAnchorPoint(0, 1); };
+        var btnBC = aRow3.add("button", undefined, "▼"); btnBC.size = [26, 20]; btnBC.onClick = function () { alignAnchorPoint(0.5, 1); };
+        var btnBR = aRow3.add("button", undefined, "◢"); btnBR.size = [26, 20]; btnBR.onClick = function () { alignAnchorPoint(1, 1); };
+
+        var btnCenterComp = anchorCol.add("button", undefined, "Center Comp");
+        btnCenterComp.preferredSize = [84, 20];
+        btnCenterComp.helpTip = "Center selected layers in composition";
+        btnCenterComp.onClick = centerInComp;
+
+        // ==== Section 4: Fade Animator + Quick Swatch (side by side) ====
+        var sec4 = makeSection("Fade  \u00B7  Swatch", "FadeSwatch");
+
+        var twoCol2 = sec4.add("group");
+        twoCol2.orientation = "row";
+        twoCol2.alignChildren = ["fill", "top"];
+        twoCol2.spacing = 6;
+
+        // -- Left: Fade Animator Pro --
+        var fadeCol = twoCol2.add("group");
+        fadeCol.orientation = "column";
+        fadeCol.alignChildren = ["fill", "top"];
+        fadeCol.spacing = 3;
+
+        var fParamsRow = fadeCol.add("group");
         fParamsRow.orientation = "row";
-        fParamsRow.spacing = 6;
-        fParamsRow.add("statictext", undefined, "Dur (fr):");
+        fParamsRow.spacing = 3;
+        fParamsRow.add("statictext", undefined, "Dur:");
         var inputFadeDur = fParamsRow.add("edittext", undefined, "20");
         inputFadeDur.characters = 3;
+        inputFadeDur.helpTip = "Fade length in frames at speed 1";
         fParamsRow.add("statictext", undefined, "Spd:");
         var inputFadeSpd = fParamsRow.add("edittext", undefined, "1");
         inputFadeSpd.characters = 3;
-        inputFadeSpd.helpTip = "Speed multiplier: 2 = twice as fast (half the duration), 0.5 = twice as slow";
-        inputFadeDur.helpTip = "Fade length in frames at speed 1";
+        inputFadeSpd.helpTip = "Speed multiplier: 2 = twice as fast, 0.5 = twice as slow";
 
-        var fEaseRow = fadePnl.add("group");
-        fEaseRow.orientation = "row";
+        var fEaseRow = fadeCol.add("group");
+        fEaseRow.spacing = 3;
         fEaseRow.add("statictext", undefined, "Ease:");
         var dropEase = fEaseRow.add("dropdownlist", undefined, [
             "Linear", "Ease In (Expo)", "Ease Out (Sine)",
             "Ease InOut (Quad)", "Ease InOut (Cubic)", "Bounce", "Elastic"
         ]);
         dropEase.selection = 0;
-        dropEase.preferredSize.width = 140;
+        dropEase.preferredSize.width = 100;
 
-        var fOptsRow = fadePnl.add("group");
+        var fOptsRow = fadeCol.add("group");
         fOptsRow.orientation = "row";
-        fOptsRow.spacing = 8;
+        fOptsRow.spacing = 6;
         var chkFadeIn = fOptsRow.add("checkbox", undefined, "In");
         chkFadeIn.value = true;
         var chkFadeOut = fOptsRow.add("checkbox", undefined, "Out");
@@ -2767,14 +2837,14 @@
         var chkMarkers = fOptsRow.add("checkbox", undefined, "Markers");
         chkMarkers.value = true;
 
-        var fActionsRow = fadePnl.add("group");
+        var fActionsRow = fadeCol.add("group");
         fActionsRow.orientation = "row";
         fActionsRow.alignChildren = ["fill", "center"];
-        fActionsRow.spacing = 6;
+        fActionsRow.spacing = 4;
 
         var btnApplyFade = fActionsRow.add("button", undefined, "🚀 Apply Fade");
         btnApplyFade.onClick = function () {
-            var dur = parseInt(inputFadeDur.text);
+            var dur = parseInt(inputFadeDur.text, 10);
             var spd = parseFloat(inputFadeSpd.text);
             var easeIdx = dropEase.selection.index;
             if (isNaN(dur) || dur <= 0) return alert("Enter valid fade duration in frames.");
@@ -2784,70 +2854,42 @@
         };
 
         var btnDeleteFade = fActionsRow.add("button", undefined, "❌ Clear");
-        btnDeleteFade.size = [60, 24];
+        btnDeleteFade.preferredSize = [52, 22];
         btnDeleteFade.helpTip = "Remove LazyMotion fades and their fade in / fade out markers (other expressions and markers stay)";
         btnDeleteFade.onClick = deleteFadeTools;
 
-        // ---- 4. 9-Point Anchor Point Alignment ----
-        var anchorPnl = win.add("panel", undefined, "Anchor Point & Align");
-        anchorPnl.orientation = "column";
-        anchorPnl.alignChildren = ["center", "center"];
-        anchorPnl.spacing = 4;
-        anchorPnl.margins = [8, 10, 8, 8];
+        // -- Right: Quick Swatch --
+        var swatchCol = twoCol2.add("group");
+        swatchCol.orientation = "column";
+        swatchCol.alignChildren = ["fill", "top"];
+        swatchCol.spacing = 3;
 
-        var aRow1 = anchorPnl.add("group");
-        aRow1.spacing = 4;
-        var btnTL = aRow1.add("button", undefined, "◤"); btnTL.size = [30, 22]; btnTL.onClick = function () { alignAnchorPoint(0, 0); };
-        var btnTC = aRow1.add("button", undefined, "▲"); btnTC.size = [30, 22]; btnTC.onClick = function () { alignAnchorPoint(0.5, 0); };
-        var btnTR = aRow1.add("button", undefined, "◥"); btnTR.size = [30, 22]; btnTR.onClick = function () { alignAnchorPoint(1, 0); };
-
-        var aRow2 = anchorPnl.add("group");
-        aRow2.spacing = 4;
-        var btnML = aRow2.add("button", undefined, "◀"); btnML.size = [30, 22]; btnML.onClick = function () { alignAnchorPoint(0, 0.5); };
-        var btnMC = aRow2.add("button", undefined, "●"); btnMC.size = [30, 22]; btnMC.onClick = function () { alignAnchorPoint(0.5, 0.5); };
-        var btnMR = aRow2.add("button", undefined, "▶"); btnMR.size = [30, 22]; btnMR.onClick = function () { alignAnchorPoint(1, 0.5); };
-
-        var aRow3 = anchorPnl.add("group");
-        aRow3.spacing = 4;
-        var btnBL = aRow3.add("button", undefined, "◣"); btnBL.size = [30, 22]; btnBL.onClick = function () { alignAnchorPoint(0, 1); };
-        var btnBC = aRow3.add("button", undefined, "▼"); btnBC.size = [30, 22]; btnBC.onClick = function () { alignAnchorPoint(0.5, 1); };
-        var btnBR = aRow3.add("button", undefined, "◢"); btnBR.size = [30, 22]; btnBR.onClick = function () { alignAnchorPoint(1, 1); };
-
-        var btnCenterComp = anchorPnl.add("button", undefined, "Center in Comp");
-        btnCenterComp.size = [98, 22];
-        btnCenterComp.onClick = centerInComp;
-
-        // ---- 5. Live Color Swatches ----
-        var swatchPnl = win.add("panel", undefined, "Quick Swatch");
-        swatchPnl.orientation = "column";
-        swatchPnl.alignChildren = ["fill", "top"];
-        swatchPnl.spacing = 6;
-        swatchPnl.margins = [8, 10, 8, 8];
-
-        var swCtrlRow = swatchPnl.add("group");
+        var swCtrlRow = swatchCol.add("group");
         swCtrlRow.orientation = "row";
-        swCtrlRow.alignChildren = ["center", "center"];
-        swCtrlRow.spacing = 10;
-
-        swCtrlRow.add("statictext", undefined, "Total:");
-        var swTotalDrop = swCtrlRow.add("dropdownlist", undefined, ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
+        swCtrlRow.alignChildren = ["left", "center"];
+        swCtrlRow.spacing = 4;
+        swCtrlRow.add("statictext", undefined, "Tot:");
+        var swTotalDrop = swCtrlRow.add("dropdownlist", undefined,
+            ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
         swTotalDrop.selection = Math.min(fillColors.length - 1, 9);
-
-        swCtrlRow.add("statictext", undefined, "Cols:");
-        var swColDrop = swCtrlRow.add("dropdownlist", undefined, ["1", "2", "3", "4", "5", "6"]);
+        swTotalDrop.preferredSize.width = 44;
+        swCtrlRow.add("statictext", undefined, "Col:");
+        var swColDrop = swCtrlRow.add("dropdownlist", undefined,
+            ["1", "2", "3", "4", "5", "6"]);
         swColDrop.selection = Math.min(savedColIndex, 5);
+        swColDrop.preferredSize.width = 40;
 
-        var swContainer = swatchPnl.add("group");
+        var swContainer = swatchCol.add("group");
         swContainer.orientation = "column";
         swContainer.alignChildren = ["center", "top"];
-        swContainer.spacing = 6;
+        swContainer.spacing = 3;
 
         function renderSwatches() {
             while (swContainer.children.length > 0) {
                 swContainer.remove(swContainer.children[0]);
             }
 
-            var currentCols = parseInt(swColDrop.selection.text) || 5;
+            var currentCols = parseInt(swColDrop.selection.text, 10) || 5;
             var curRowGrp = null;
 
             for (var i = 0; i < fillColors.length; i++) {
@@ -2855,17 +2897,17 @@
                     curRowGrp = swContainer.add("group");
                     curRowGrp.orientation = "row";
                     curRowGrp.alignChildren = ["left", "top"];
-                    curRowGrp.spacing = 6;
+                    curRowGrp.spacing = 3;
                 }
 
                 var colBox = curRowGrp.add("group");
                 colBox.orientation = "column";
                 colBox.alignChildren = ["center", "top"];
-                colBox.spacing = 3;
+                colBox.spacing = 2;
 
                 // Fill color block
                 var fillIcn = colBox.add("iconbutton", undefined, undefined);
-                fillIcn.size = [38, 28];
+                fillIcn.size = [30, 20];
                 fillIcn.onDraw = (function (idx) {
                     return function () {
                         var br = this.graphics.newBrush(this.graphics.BrushType.SOLID_COLOR, hexToAeColor(fillColors[idx]));
@@ -2887,18 +2929,19 @@
                     };
                 })(i);
 
-                var btnF = colBox.add("button", undefined, "Fill");
-                btnF.size = [38, 18];
+                var btnF = colBox.add("button", undefined, "F");
+                btnF.size = [30, 16];
+                btnF.helpTip = "Apply Fill color";
                 btnF.onClick = (function (idx) {
                     return function () { applySwatchColor(fillColors[idx], "Fill"); };
                 })(i);
 
                 // Stroke color block
                 var strkIcn = colBox.add("iconbutton", undefined, undefined);
-                strkIcn.size = [38, 18];
+                strkIcn.size = [30, 14];
                 strkIcn.onDraw = (function (idx) {
                     return function () {
-                        var pen = this.graphics.newPen(this.graphics.PenType.SOLID_COLOR, hexToAeColor(strokeColors[idx]), 4);
+                        var pen = this.graphics.newPen(this.graphics.PenType.SOLID_COLOR, hexToAeColor(strokeColors[idx]), 3);
                         this.graphics.rectPath(0, 0, this.size[0], this.size[1]);
                         this.graphics.strokePath(pen);
                     };
@@ -2915,8 +2958,9 @@
                     };
                 })(i);
 
-                var btnS = colBox.add("button", undefined, "Strk");
-                btnS.size = [38, 18];
+                var btnS = colBox.add("button", undefined, "S");
+                btnS.size = [30, 16];
+                btnS.helpTip = "Apply Stroke color";
                 btnS.onClick = (function (idx) {
                     return function () { applySwatchColor(strokeColors[idx], "Stroke"); };
                 })(i);
@@ -2926,7 +2970,7 @@
         }
 
         swTotalDrop.onChange = function () {
-            var newLen = parseInt(this.selection.text);
+            var newLen = parseInt(this.selection.text, 10);
             var oldLen = fillColors.length;
             if (newLen > oldLen) {
                 for (var j = oldLen; j < newLen; j++) {
@@ -2950,7 +2994,7 @@
         renderSwatches();
 
         // ---- Footer / Credits ----
-        var footer = win.add("statictext", undefined, "v" + _buildVersion.replace(/\.0$/, "") + " • Developed By RaisulSohan • raisulsohan.com");
+        var footer = win.add("statictext", undefined, "v" + _buildVersion.replace(/\.0$/, "") + " \u2022 Developed By RaisulSohan \u2022 raisulsohan.com");
         footer.graphics.font = ScriptUI.newFont("sans", "ITALIC", 9);
         footer.alignment = ["center", "bottom"];
 

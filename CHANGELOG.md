@@ -2,6 +2,11 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.14
+
+### 🐛 Bug Fixes
+- **Auto Box Reference Error:** Fixed an ExtendScript bug where duplicating or adding layers during the Auto Box routine invalidated internal text layer object references, causing a ReferenceError: Object is invalid crash. Implemented robust temporary layer naming cache to maintain strict DOM access despite dynamic index shifting.
+
 ## 1.8.13
 
 ### ✨ LazyType Reveal Rig for Auto Text Box

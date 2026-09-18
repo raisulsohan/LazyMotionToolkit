@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.13";
+    var _buildVersion     = "1.8.14";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -941,11 +941,9 @@
      * always reports its full width — this copy is the only way to know how wide
      * the visible glyphs actually are.
      */
-    function createMeasureLayer(comp, textLayer, unit) {
-        var m = textLayer.duplicate();
-        m.name = textLayer.name + MEASURE_TAG;
-        // A duplicate brings the animators, effects and expressions along, and any
-        // of them can move the bounds. The measure layer must report plain metrics.
+    function createMeasureLayer(comp, tempName, unit, origName) {
+        var m = comp.layer(tempName).duplicate();
+        m.name = origName + MEASURE_TAG;
         removeProperties(m.property("ADBE Text Properties").property("ADBE Text Animators"));
         removeProperties(m.property("ADBE Effect Parade"));
         try {
@@ -959,20 +957,21 @@
         try { m.motionBlur = false; } catch (e4) {}
         try { m.label = 0; } catch (e5) {}
         m.enabled = true; // sourceRectAtTime only reports on a layer AE evaluates
-        m.parent = textLayer; // keeps its place, and survives renaming the text layer
+        m.parent = comp.layer(tempName); // keeps its place, and survives renaming the text layer
         m.property("ADBE Text Properties").property("ADBE Text Document").expression = measureSourceExpression(unit);
-        m.moveAfter(textLayer);
+        m.moveAfter(comp.layer(tempName));
         m.selected = false;
         return m;
     }
 
-    function buildTypeAnimators(textLayer, style, o, fontSize) {
+    function buildTypeAnimators(comp, tempName, style, o, fontSize) {
         var basedOn = (style.unit === "words") ? BASED_ON.words
                     : (style.unit === "lines") ? BASED_ON.lines : BASED_ON.chars;
         var soft = style.soft && o.band > 0;
 
+        var txtLyr = comp.layer(tempName);
         // 1. Hide everything past the caret, so the text types itself on.
-        var hide = addTextAnimator(textLayer, TYPE_HIDE);
+        var hide = addTextAnimator(txtLyr, TYPE_HIDE);
         animatorProps(hide).addProperty("ADBE Text Opacity").setValue(0);
         var hideSel = addRangeSelector(hide);
         setSelectorValue(hideSel, RANGE.basedOn, basedOn);
@@ -983,9 +982,10 @@
 
         if (!soft) return;
 
+        txtLyr = comp.layer(tempName);
         // 2. The few units at the caret arrive offset, blurred and transparent, and
         //    land as the caret moves on. This is the part that stops it looking flat.
-        var settle = addTextAnimator(textLayer, TYPE_SETTLE);
+        var settle = addTextAnimator(txtLyr, TYPE_SETTLE);
         var sp = animatorProps(settle);
         var look = AUTOBOX_SETTLES[o.settle] || AUTOBOX_SETTLES[0];
         try { sp.addProperty("ADBE Text Opacity").setValue(0); } catch (eO) {}
@@ -1002,11 +1002,12 @@
         if (sEnd) sEnd.expression = caretSnippet(style.unit) + "\nMath.max(0, Math.min(100, caret));";
     }
 
-    function buildBoxLayer(comp, textLayer, o, wantsReveal) {
+    function buildBoxLayer(comp, tempName, o, wantsReveal, origName) {
         var box = comp.layers.addShape();
-        box.name = textLayer.name + BOX_TAG;
-        box.moveAfter(textLayer);
-        box.parent = textLayer;
+        box.name = origName + BOX_TAG;
+        var txtLyr = comp.layer(tempName);
+        box.moveAfter(txtLyr);
+        box.parent = txtLyr;
 
         addSliderControl(box, "Padding X", o.padX);
         addSliderControl(box, "Padding Y", o.padY);
@@ -1070,17 +1071,19 @@
     }
 
     /** Everything Auto Box ever added to `textLayer`, so re-running replaces instead of stacking. */
-    function removeAutoBoxRig(comp, textLayer) {
+    function removeAutoBoxRig(comp, tempName) {
         var removed = 0;
         for (var i = comp.numLayers; i >= 1; i--) {
             var l = comp.layer(i);
             var mine = false;
-            try { mine = (l.parent !== null && l.parent.index === textLayer.index); } catch (e) {}
+            try { mine = (l.parent !== null && l.parent.index === comp.layer(tempName).index); } catch (e) {}
             if (!mine) continue;
             if (l.name.indexOf(BOX_TAG) < 0 && l.name.indexOf(MEASURE_TAG) < 0) continue;
             try { l.remove(); removed++; } catch (e2) {}
         }
-        var animators = textLayer.property("ADBE Text Properties").property("ADBE Text Animators");
+        var txtLyr = comp.layer(tempName);
+        if (!txtLyr) return removed;
+        var animators = txtLyr.property("ADBE Text Properties").property("ADBE Text Animators");
         if (animators) {
             for (var a = animators.numProperties; a >= 1; a--) {
                 var nm = animators.property(a).name;
@@ -1091,41 +1094,44 @@
         }
         var fxNames = [FX_REVEAL, FX_BAND];
         for (var f = 0; f < fxNames.length; f++) {
-            var fx = findEffectByName(textLayer, fxNames[f]);
+            var fx = findEffectByName(comp.layer(tempName), fxNames[f]);
             if (fx) { try { fx.remove(); removed++; } catch (e4) {} }
         }
         return removed;
     }
 
-    function createAutoBox(comp, textLayer, o) {
+    function createAutoBox(comp, tempName, o, origName) {
         var style = AUTOBOX_STYLES[o.style] || AUTOBOX_STYLES[0];
-        var doc = textLayer.property("ADBE Text Properties").property("ADBE Text Document").value;
+        
+        var txtLyr = comp.layer(tempName);
+        var doc = txtLyr.property("ADBE Text Properties").property("ADBE Text Document").value;
         var fontSize = 50;
         try { if (doc.fontSize > 0) fontSize = doc.fontSize; } catch (eFs) {}
         var band = (style.band !== undefined) ? style.band : o.band;
         var opts = mergeOptions(o, { band: band });
 
-        removeAutoBoxRig(comp, textLayer);
+        removeAutoBoxRig(comp, tempName);
 
         var wantsReveal = !style.noReveal;
         if (wantsReveal) {
-            var revealFx = addSliderControl(textLayer, FX_REVEAL, 0);
-            addSliderControl(textLayer, FX_BAND, Math.max(0, band));
+            txtLyr = comp.layer(tempName);
+            var revealFx = addSliderControl(txtLyr, FX_REVEAL, 0);
+            addSliderControl(txtLyr, FX_BAND, Math.max(0, band));
             var reveal = revealFx.property(1);
-            // Long text types for longer: one duration for every length looks wrong.
             var units = countUnits(doc.text, style.unit);
             var frames = opts.timingPerUnit
                 ? Math.min(opts.maxFrames, Math.max(2, Math.round(units * opts.framesPerUnit)))
                 : Math.max(2, Math.round(opts.totalFrames));
-            var startTime = opts.atPlayhead ? comp.time : textLayer.inPoint;
+            var startTime = opts.atPlayhead ? comp.time : txtLyr.inPoint;
             reveal.setValueAtTime(startTime, 0);
             reveal.setValueAtTime(startTime + frames / comp.frameRate, 100);
             applyRevealEase(reveal, opts.ease);
-            createMeasureLayer(comp, textLayer, style.unit);
+            
+            createMeasureLayer(comp, tempName, style.unit, origName);
         }
 
-        if (style.animate) buildTypeAnimators(textLayer, style, opts, fontSize);
-        return buildBoxLayer(comp, textLayer, opts, wantsReveal);
+        if (style.animate) buildTypeAnimators(comp, tempName, style, opts, fontSize);
+        return buildBoxLayer(comp, tempName, opts, wantsReveal, origName);
     }
 
     /** Engine: box + reveal rig for every text layer in `layers`. Returns what it skipped. */
@@ -1135,21 +1141,35 @@
         var skipped = [];
         app.beginUndoGroup("LazyMotion: Auto Box");
         try {
+            var uniqueId = "LM_TEMP_" + new Date().getTime() + "_";
+            var targets = [];
             for (var i = 0; i < layers.length; i++) {
                 var layer = layers[i];
                 if (!(layer instanceof TextLayer)) {
                     skipped.push(layer.name + " (not a text layer)");
                     continue;
                 }
-                // One layer that fails must not stop the others.
+                var origName = layer.name;
+                var tempName = uniqueId + i;
+                layer.name = tempName;
+                targets.push({ origName: origName, tempName: tempName });
+            }
+
+            for (var t = 0; t < targets.length; t++) {
                 try {
-                    made.push(createAutoBox(comp, layer, o));
+                    made.push(createAutoBox(comp, targets[t].tempName, o, targets[t].origName));
                 } catch (eLayer) {
-                    skipped.push(layer.name + " (" + eLayer.toString() + ")");
+                    skipped.push(targets[t].origName + " (" + eLayer.name + ": " + eLayer.message + ")");
                 }
             }
+
+            for (var t = 0; t < targets.length; t++) {
+                var restored = comp.layer(targets[t].tempName);
+                if (restored) restored.name = targets[t].origName;
+            }
+
             try {
-                for (var s = 0; s < layers.length; s++) layers[s].selected = false;
+                for (var s = 1; s <= comp.numLayers; s++) comp.layer(s).selected = false;
                 for (var m = 0; m < made.length; m++) made[m].selected = true;
             } catch (eSel) {}
         } finally {

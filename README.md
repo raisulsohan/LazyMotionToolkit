@@ -20,15 +20,18 @@
   <a href="#-author--credits">Credits</a>
 </p>
 
-Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.7** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.8** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
 
 ---
 
-## 🆕 What's New in 1.7
+## 🆕 What's New in 1.8
 
-- **Compact Modern Two-Column Layout:** Head to Line paired side-by-side with 9-Point Anchor Point, and Fade Animator Pro paired side-by-side with Quick Swatch. Total vertical height reduced by ~40%, ensuring all controls remain visible when docked in narrow or short panels.
-- **Collapsible Accordion Sections:** Every section can be collapsed/expanded with compact toggle controls (`▾`/`▸`). Open/closed state persists across After Effects sessions.
-- **Optimized Spacing:** Tighter margins (6px) and spacing (4px) with balanced column proportions.
+- **Figma / React Premium Dark Theme:** Rebuilt the entire ScriptUI interface based on the modern React design (`LazyMotionToolkit UI`).
+- **Custom Vector onDraw Buttons:** Rich dark styled buttons (`#222428`) with clean border styling and crisp centered typography.
+- **Glowing Accent Buttons:** Full-width Indigo/Blue accent (`#5865f2`) for `⚡ LazyStrike FX` and `⚡ Apply` with white typography.
+- **Interactive 9-Point Anchor Pad:** 3×3 direction grid with live active-state highlighting (matching the React UI's indigo circle indicator).
+- **Etched Section Headers:** Clean uppercase category titles with 1px horizontal etched divider lines (`#2a2c32`).
+- **Pill-Style Swatch Controls:** Color blocks with live active border indicators and mini `F` (Fill) and `S` (Stroke) pill buttons.
 
 - **⚡ LazyStrike FX** (was *QuickStrike FX*): lightning bolts, flashes and sky flashes, by timing or driven by audio.
   - Effect settings are found by match name, so it works in any After Effects language.

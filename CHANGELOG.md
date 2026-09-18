@@ -2,6 +2,22 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.0
+
+### 🎨 Modern Figma / React Dark Theme UI
+- **Custom Vector onDraw Rendering:**
+  - Styled all buttons with modern dark theme palette (`#222428` fill, `#2e3039` border, `#b0b5c3` text).
+  - Primary Indigo/Blue accent (`#5865f2`) with glowing styling for `⚡ LazyStrike FX` and `⚡ Apply`.
+  - Subtle dark red accent styling for `Remove` preview button (`#ed4245`).
+- **Interactive 9-Point Anchor Pad:**
+  - Dynamic 3×3 direction grid with live active point highlighting (indigo circle active state).
+- **Etched Section Category Headers:**
+  - Uppercase category titles with 1px etched horizontal divider lines (`#2a2c32`).
+- **Top Header Bar & Branding:**
+  - Glowing indigo indicator dot, `LazyMotionToolkit` bold title, author branding, and version pill badge (`v1.8`).
+- **Pill-Style Swatch Controls:**
+  - Rounded color blocks with active border highlight and mini `F` (Fill) and `S` (Stroke) pill buttons.
+
 ## 1.7.0
 
 ### 📐 Compact Two-Column UI & Collapsible Sections

@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.7.0";
+    var _buildVersion     = "1.8.0";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================

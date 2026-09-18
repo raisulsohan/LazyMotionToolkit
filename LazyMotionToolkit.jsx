@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.4";
+    var _buildVersion     = "1.8.5";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2936,8 +2936,15 @@
         headCol.alignChildren = ["fill", "top"];
         headCol.spacing = 4;
         headCol.alignment = ["fill", "top"];
+        headCol.preferredSize.width = 155;
 
-        var hTypeRow = headCol.add("group");
+        var headColTop = headCol.add("group");
+        headColTop.orientation = "column";
+        headColTop.alignChildren = ["fill", "top"];
+        headColTop.spacing = 4;
+        headColTop.preferredSize.height = 78;
+
+        var hTypeRow = headColTop.add("group");
         hTypeRow.orientation = "row";
         hTypeRow.alignChildren = ["left", "center"];
         hTypeRow.spacing = 4;
@@ -2951,13 +2958,13 @@
         dropHeadType.selection = 0;
         dropHeadType.preferredSize = [95, 20];
 
-        var hCheckRow1 = headCol.add("group");
+        var hCheckRow1 = headColTop.add("group");
         hCheckRow1.orientation = "row";
         hCheckRow1.spacing = 8;
         var chkRoundCorners = createCheckbox(hCheckRow1, "Round", false, true);
         var chkDoubleSided = createCheckbox(hCheckRow1, "Double", false, true);
 
-        var hCheckRow2 = headCol.add("group");
+        var hCheckRow2 = headColTop.add("group");
         hCheckRow2.orientation = "row";
         hCheckRow2.alignChildren = ["left", "center"];
         hCheckRow2.spacing = 4;
@@ -2984,7 +2991,14 @@
         var anchorCol = twoCol1.add("group");
         anchorCol.orientation = "column";
         anchorCol.alignChildren = ["center", "top"];
-        anchorCol.spacing = 3;
+        anchorCol.spacing = 4;
+        anchorCol.alignment = ["fill", "top"];
+        anchorCol.preferredSize.width = 155;
+
+        var anchorColTop = anchorCol.add("group");
+        anchorColTop.orientation = "column";
+        anchorColTop.alignChildren = ["center", "top"];
+        anchorColTop.preferredSize.height = 78;
 
         var activeAnchorIdx = 4; // Default to Center '●'
         var dirChars = ['↖', '↑', '↗', '←', '●', '→', '↙', '↓', '↘'];
@@ -2995,7 +3009,7 @@
         ];
         var anchorBtns = [];
 
-        var gridContainer = anchorCol.add("group");
+        var gridContainer = anchorColTop.add("group");
         gridContainer.orientation = "column";
         gridContainer.alignChildren = ["center", "center"];
         gridContainer.spacing = 3;
@@ -3050,8 +3064,15 @@
         fadeCol.alignChildren = ["fill", "top"];
         fadeCol.spacing = 4;
         fadeCol.alignment = ["fill", "top"];
+        fadeCol.preferredSize.width = 155;
 
-        var fParamsRow = fadeCol.add("group");
+        var fadeColTop = fadeCol.add("group");
+        fadeColTop.orientation = "column";
+        fadeColTop.alignChildren = ["fill", "top"];
+        fadeColTop.spacing = 4;
+        fadeColTop.preferredSize.height = 70;
+
+        var fParamsRow = fadeColTop.add("group");
         fParamsRow.orientation = "row";
         fParamsRow.alignChildren = ["left", "center"];
         fParamsRow.spacing = 4;
@@ -3070,7 +3091,7 @@
         inputFadeSpd.characters = 3;
         inputFadeSpd.helpTip = "Speed multiplier: 2 = twice as fast, 0.5 = twice as slow";
 
-        var fEaseRow = fadeCol.add("group");
+        var fEaseRow = fadeColTop.add("group");
         fEaseRow.orientation = "row";
         fEaseRow.alignChildren = ["left", "center"];
         fEaseRow.spacing = 4;
@@ -3084,7 +3105,7 @@
         dropEase.selection = 0;
         dropEase.preferredSize = [95, 20];
 
-        var fOptsRow = fadeCol.add("group");
+        var fOptsRow = fadeColTop.add("group");
         fOptsRow.orientation = "row";
         fOptsRow.spacing = 6;
         var chkFadeIn = createCheckbox(fOptsRow, "In", true);
@@ -3119,7 +3140,9 @@
         var swatchCol = twoCol2.add("group");
         swatchCol.orientation = "column";
         swatchCol.alignChildren = ["fill", "top"];
-        swatchCol.spacing = 3;
+        swatchCol.spacing = 10;
+        swatchCol.alignment = ["fill", "top"];
+        swatchCol.preferredSize.width = 155;
 
         var swCtrlRow = swatchCol.add("group");
         swCtrlRow.orientation = "row";

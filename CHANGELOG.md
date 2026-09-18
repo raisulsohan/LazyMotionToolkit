@@ -2,6 +2,11 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.5
+
+### 📏 Layout Alignment Perfected
+- **Horizontal & Vertical Alignment:** Refactored column layouts to force a strict `155px` width per column, perfectly centering the gap. Adjusted internal group heights (`78px` and `70px`) and spacing constraints to ensure the bottom action buttons ("Head it!", "Center Comp", "Apply", "Clear") snap precisely to the identical horizontal baseline across different sections, matching the Figma grid pixel-by-pixel.
+
 ## 1.8.4
 
 ### 🎨 Visual Precision Refinements

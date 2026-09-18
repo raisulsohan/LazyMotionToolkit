@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.10";
+    var _buildVersion     = "1.8.11";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2602,6 +2602,42 @@
             win.graphics.backgroundColor = win.graphics.newBrush(win.graphics.BrushType.SOLID_COLOR, C.bgPanel);
         } catch(e) {}
 
+        // ---- Two-column geometry (must match the Motion Tools rows) ----
+        var PANEL_MARGIN = 12;   // win.margins
+        var COL_SPACING  = 4;    // gap between the two columns
+        var MIN_COL_W    = 150;  // narrowest a column's content can live in
+        var SW_W = 30, SW_GAP = 3; // one swatch block + its gap
+
+        var columnPairs = [];
+        var lastColW = MIN_COL_W;
+
+        function registerColumnPair(left, right) { columnPairs.push([left, right]); }
+
+        /** min = preferred = max, so ScriptUI cannot give one side more than the other. */
+        function lockWidth(ctrl, w) {
+            ctrl.minimumSize.width   = w;
+            ctrl.preferredSize.width = w;
+            ctrl.maximumSize.width   = w;
+        }
+
+        /** Both columns of every registered pair get exactly half the panel. */
+        function syncColumns() {
+            var total = 0;
+            if (win.size && win.size[0] > 0) total = win.size[0];
+            else if (win.preferredSize && win.preferredSize[0] > 0) total = win.preferredSize[0];
+            if (total <= 0) total = MIN_COL_W * 2 + PANEL_MARGIN * 2 + COL_SPACING;
+
+            var colW = Math.floor((total - PANEL_MARGIN * 2 - COL_SPACING) / 2);
+            if (colW < MIN_COL_W) colW = MIN_COL_W;
+            lastColW = colW;
+
+            for (var i = 0; i < columnPairs.length; i++) {
+                lockWidth(columnPairs[i][0], colW);
+                lockWidth(columnPairs[i][1], colW);
+            }
+            return colW;
+        }
+
         // ---- UI Drawing Helpers ----
 
         function fillRoundRect(g, brush, x, y, w, h, r) {
@@ -2738,43 +2774,30 @@
             var hdrRow = rowGrp.add("group");
             hdrRow.orientation = "row";
             hdrRow.alignChildren = ["fill", "center"];
-            hdrRow.spacing = 4;
+            hdrRow.spacing = COL_SPACING;
             hdrRow.margins = [0, 4, 0, 2];
 
-            // Left Header
-            var leftHdr = hdrRow.add("group");
-            leftHdr.orientation = "row";
-            leftHdr.alignChildren = ["left", "center"];
-            leftHdr.spacing = 6;
-            leftHdr.alignment = ["fill", "center"];
-            leftHdr.preferredSize.width = 240;
+            function half(title) {
+                var g = hdrRow.add("group");
+                g.orientation = "row";
+                g.alignChildren = ["left", "center"];
+                g.alignment = ["fill", "center"];
+                g.spacing = 6;
+                g.margins = 0;
 
-            var lbl1 = leftHdr.add("statictext", undefined, title1.toUpperCase());
-            lbl1.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
-            try { lbl1.graphics.foregroundColor = rowGrp.graphics.newPen(rowGrp.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
+                var lbl = g.add("statictext", undefined, title.toUpperCase());
+                lbl.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
+                try { lbl.graphics.foregroundColor = rowGrp.graphics.newPen(rowGrp.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
 
-            var div1 = leftHdr.add("panel");
-            div1.alignment = ["fill", "center"];
-            div1.maximumSize.height = 1;
+                var div = g.add("panel");
+                div.alignment = ["fill", "center"];
+                div.maximumSize.height = 1;
+                return g;
+            }
 
-            // Right Header
-            var rightHdr = hdrRow.add("group");
-            rightHdr.orientation = "row";
-            rightHdr.alignChildren = ["left", "center"];
-            rightHdr.spacing = 6;
-            rightHdr.alignment = ["fill", "center"];
-            rightHdr.preferredSize.width = 240;
-
-            var lbl2 = rightHdr.add("statictext", undefined, title2.toUpperCase());
-            lbl2.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
-            try { lbl2.graphics.foregroundColor = rowGrp.graphics.newPen(rowGrp.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
-
-            var div2 = rightHdr.add("panel");
-            div2.alignment = ["fill", "center"];
-            div2.maximumSize.height = 1;
-
-            hdrRow.leftHdr = leftHdr;
-            hdrRow.rightHdr = rightHdr;
+            hdrRow.leftHdr  = half(title1);
+            hdrRow.rightHdr = half(title2);
+            registerColumnPair(hdrRow.leftHdr, hdrRow.rightHdr);
             return hdrRow;
         }
 
@@ -2826,7 +2849,7 @@
         var tRow1 = toolsGrid.add("group");
         tRow1.orientation = "row";
         tRow1.alignChildren = ["fill", "center"];
-        tRow1.spacing = 4;
+        tRow1.spacing = COL_SPACING;
         var btnPrecompIndiv = tRow1.add("iconbutton", undefined, undefined);
         styleBtn(btnPrecompIndiv, "⊞ Precomp (1:1)", "default", 30);
         btnPrecompIndiv.preferredSize.width = 10;
@@ -2844,7 +2867,7 @@
         var tRow2 = toolsGrid.add("group");
         tRow2.orientation = "row";
         tRow2.alignChildren = ["fill", "center"];
-        tRow2.spacing = 4;
+        tRow2.spacing = COL_SPACING;
         var btnAutoBox = tRow2.add("iconbutton", undefined, undefined);
         styleBtn(btnAutoBox, "⊡ Auto Box", "default", 30);
         btnAutoBox.preferredSize.width = 10;
@@ -2868,13 +2891,12 @@
         // ============================================================
         // ---- 2. Preview Render Section ----
         // ============================================================
-        var prevHdr = addSectionHeader(win, "Preview Render");
-        prevHdr.text = "🎬 LazyPreview Render";
+        addSectionHeader(win, "🎬 LazyPreview Render");
 
         var prevRow = win.add("group");
         prevRow.orientation = "row";
         prevRow.alignChildren = ["fill", "center"];
-        prevRow.spacing = 4;
+        prevRow.spacing = COL_SPACING;
 
         var btnRender = prevRow.add("iconbutton", undefined, undefined);
         styleBtn(btnRender, "▶ Render In→Out", "default", 30);
@@ -2937,12 +2959,12 @@
         // ============================================================
         // ---- 3. Head to Line & Anchor (Two Columns) ----
         // ============================================================
-        var hdr1 = addSharedHeader(win, "Head to Line", "Anchor");
+        addSharedHeader(win, "Head to Line", "Anchor");
 
         var twoCol1 = win.add("group");
         twoCol1.orientation = "row";
         twoCol1.alignChildren = ["fill", "bottom"];
-        twoCol1.spacing = 4;
+        twoCol1.spacing = COL_SPACING;
 
         // -- Left: Head to Line Form --
         var headCol = twoCol1.add("group");
@@ -2950,7 +2972,6 @@
         headCol.alignChildren = ["fill", "top"];
         headCol.spacing = 4;
         headCol.alignment = ["fill", "bottom"];
-        headCol.preferredSize.width = 240;
 
         var hTypeRow = headCol.add("group");
         hTypeRow.orientation = "row";
@@ -2964,7 +2985,7 @@
             "Pentagon", "Hexagon", "Heptagon", "Octagon"
         ]);
         dropHeadType.selection = 0;
-        dropHeadType.preferredSize = [95, 20];
+        dropHeadType.preferredSize = [86, 20];
 
         var hCheckRow1 = headCol.add("group");
         hCheckRow1.orientation = "row";
@@ -3002,7 +3023,7 @@
         anchorCol.alignChildren = ["fill", "top"];
         anchorCol.spacing = 4;
         anchorCol.alignment = ["fill", "bottom"];
-        anchorCol.preferredSize.width = 240;
+        registerColumnPair(headCol, anchorCol);
 
         var activeAnchorIdx = 4; // Default to Center '●'
         var dirChars = ['↖', '↑', '↗', '←', '●', '→', '↙', '↓', '↘'];
@@ -3055,12 +3076,12 @@
         // ============================================================
         // ---- 4. Fade & Swatch (Two Columns) ----
         // ============================================================
-        var hdr2 = addSharedHeader(win, "Fade", "Swatch");
+        addSharedHeader(win, "Fade", "Swatch");
 
         var twoCol2 = win.add("group");
         twoCol2.orientation = "row";
         twoCol2.alignChildren = ["fill", "bottom"];
-        twoCol2.spacing = 4;
+        twoCol2.spacing = COL_SPACING;
 
         // -- Left: Fade Form --
         var fadeCol = twoCol2.add("group");
@@ -3068,7 +3089,6 @@
         fadeCol.alignChildren = ["fill", "top"];
         fadeCol.spacing = 4;
         fadeCol.alignment = ["fill", "bottom"];
-        fadeCol.preferredSize.width = 240;
 
         var fParamsRow = fadeCol.add("group");
         fParamsRow.orientation = "row";
@@ -3101,11 +3121,11 @@
             "Ease InOut (Quad)", "Ease InOut (Cubic)", "Bounce", "Elastic"
         ]);
         dropEase.selection = 0;
-        dropEase.preferredSize = [95, 20];
+        dropEase.preferredSize = [86, 20];
 
         var fOptsRow = fadeCol.add("group");
         fOptsRow.orientation = "row";
-        fOptsRow.spacing = 6;
+        fOptsRow.spacing = 4;
         var chkFadeIn = createCheckbox(fOptsRow, "In", true);
         var chkFadeOut = createCheckbox(fOptsRow, "Out", true);
         var chkMarkers = createCheckbox(fOptsRow, "Markers", true);
@@ -3142,7 +3162,7 @@
         swatchCol.alignChildren = ["fill", "top"];
         swatchCol.spacing = 4;
         swatchCol.alignment = ["fill", "bottom"];
-        swatchCol.preferredSize.width = 240;
+        registerColumnPair(fadeCol, swatchCol);
 
         var swCtrlRow = swatchCol.add("group");
         swCtrlRow.orientation = "row";
@@ -3154,14 +3174,14 @@
         totLbl.graphics.font = ScriptUI.newFont("sans", "REGULAR", 9);
         try { totLbl.graphics.foregroundColor = swatchCol.graphics.newPen(swatchCol.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
         var swTotalDrop = swCtrlRow.add("dropdownlist", undefined, ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
-        swTotalDrop.selection = Math.min(fillColors.length - 1, 9);
+        swTotalDrop.selection = Math.min(Math.max(0, fillColors.length - 1), 9);
         swTotalDrop.preferredSize = [42, 20];
 
         var colLbl = swCtrlRow.add("statictext", undefined, "Col:");
         colLbl.graphics.font = ScriptUI.newFont("sans", "REGULAR", 9);
         try { colLbl.graphics.foregroundColor = swatchCol.graphics.newPen(swatchCol.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
         var swColDrop = swCtrlRow.add("dropdownlist", undefined, ["1", "2", "3", "4", "5", "6"]);
-        swColDrop.selection = Math.min(savedColIndex, 5);
+        swColDrop.selection = (savedColIndex >= 0 && savedColIndex <= 5) ? savedColIndex : 4;
         swColDrop.preferredSize = [38, 20];
 
         var swContainer = swatchCol.add("group");
@@ -3177,7 +3197,9 @@
                 swContainer.remove(swContainer.children[0]);
             }
 
-            var currentCols = parseInt(swColDrop.selection.text, 10) || 5;
+            var wantCols = (swColDrop.selection && swColDrop.selection.text) ? (parseInt(swColDrop.selection.text, 10) || 5) : 5;
+            var fitCols = Math.max(1, Math.floor((lastColW + SW_GAP) / (SW_W + SW_GAP)));
+            var currentCols = Math.min(wantCols, fitCols);
             var curRowGrp = null;
 
             for (var i = 0; i < fillColors.length; i++) {
@@ -3186,7 +3208,7 @@
                     curRowGrp.orientation = "row";
                     curRowGrp.alignChildren = ["left", "top"];
                     curRowGrp.alignment = ["left", "top"];
-                    curRowGrp.spacing = 3;
+                    curRowGrp.spacing = SW_GAP;
                 }
 
                 var colBox = curRowGrp.add("group");
@@ -3196,7 +3218,7 @@
 
                 // Rounded Color swatch block
                 var fillIcn = colBox.add("iconbutton", undefined, undefined);
-                fillIcn.size = [30, 22];
+                fillIcn.size = [SW_W, 22];
                 fillIcn.onDraw = (function (idx) {
                     return function () {
                         var g = this.graphics;
@@ -3228,7 +3250,7 @@
 
                 // 'F' Pill Button
                 var btnF = colBox.add("iconbutton", undefined, undefined);
-                btnF.size = [30, 16];
+                btnF.size = [SW_W, 16];
                 styleBtn(btnF, "F", "pill", 16);
                 btnF.helpTip = "Apply Fill color";
                 btnF.onClick = (function (idx) {
@@ -3241,7 +3263,7 @@
 
                 // 'S' Pill Button
                 var btnS = colBox.add("iconbutton", undefined, undefined);
-                btnS.size = [30, 16];
+                btnS.size = [SW_W, 16];
                 styleBtn(btnS, "S", "pill", 16);
                 btnS.helpTip = "Apply Stroke color";
                 btnS.onClick = (function (idx) {
@@ -3253,7 +3275,7 @@
                 })(i);
             }
 
-            win.layout.layout(true);
+            try { win.layout.layout(true); } catch (e) {}
         }
 
         swTotalDrop.onChange = function () {
@@ -3278,6 +3300,7 @@
             renderSwatches();
         };
 
+        syncColumns();
         renderSwatches();
 
         var footer = win.add("statictext", undefined, "v" + _buildVersion.replace(/\.0$/, "") + " • Developed By RaisulSohan • raisulsohan.com");
@@ -3285,35 +3308,9 @@
         footer.alignment = ["center", "bottom"];
         try { footer.graphics.foregroundColor = win.graphics.newPen(win.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (eF) {}
 
-        function syncTwoColumnWidths() {
-            try {
-                var curW = 0;
-                if (win.size && win.size[0] > 0) {
-                    curW = win.size[0];
-                } else if (win.preferredSize && win.preferredSize[0] > 0) {
-                    curW = win.preferredSize[0];
-                }
-                if (curW <= 0) return;
-
-                // 24 = margins (12 left + 12 right), 4 = spacing between the two columns
-                var colW = Math.floor((curW - 24 - 4) / 2);
-                if (colW < 140) colW = 140;
-
-                if (hdr1 && hdr1.leftHdr) hdr1.leftHdr.preferredSize.width = colW;
-                if (hdr1 && hdr1.rightHdr) hdr1.rightHdr.preferredSize.width = colW;
-                if (headCol) headCol.preferredSize.width = colW;
-                if (anchorCol) anchorCol.preferredSize.width = colW;
-
-                if (hdr2 && hdr2.leftHdr) hdr2.leftHdr.preferredSize.width = colW;
-                if (hdr2 && hdr2.rightHdr) hdr2.rightHdr.preferredSize.width = colW;
-                if (fadeCol) fadeCol.preferredSize.width = colW;
-                if (swatchCol) swatchCol.preferredSize.width = colW;
-            } catch (eSync) {}
-        }
-
         win.onResizing = win.onResize = function () {
             try {
-                syncTwoColumnWidths();
+                syncColumns();
                 this.layout.resize();
             } catch (eR) {}
         };
@@ -3321,7 +3318,12 @@
         if (win instanceof Window) {
             win.center();
             win.show();
+            syncColumns();
+            win.layout.layout(true);
+            win.layout.resize();
         } else {
+            win.layout.layout(true);
+            syncColumns();
             win.layout.layout(true);
             win.layout.resize();
         }

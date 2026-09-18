@@ -2,6 +2,14 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.11
+
+### 📐 Pixel-Perfect 50/50 Column Geometry & Swatch Width Synchronization
+- **Strict Column Width Locking (`lockWidth` & `syncColumns`):** Locks `minimumSize.width = preferredSize.width = maximumSize.width = colW` on all registered column pairs (`Head to Line` / `Anchor`, `Fade` / `Swatch`, and dual headers). Eliminates ScriptUI width biasing from child content, ensuring the center gap across all sections is in exact vertical alignment with the Motion Tools buttons.
+- **Responsive Swatch Grid Fitting:** Dynamically computes fitting column count (`wantCols` vs `fitCols`) based on `lastColW`, `SW_W = 30`, and `SW_GAP = 3`. Swatch blocks and pill buttons cleanly adapt to column width without pushing boundaries.
+- **Header & Layout Polish:** Re-added etched section header for `🎬 LazyPreview Render`, standardized row spacing to `COL_SPACING` (4px), and streamlined `addSharedHeader` to register header halves directly.
+- **Robust Dropdown Defaults:** Guarded `swColDrop` selection against out-of-range/uninitialized saved index values, cleanly defaulting to 5 columns.
+
 ## 1.8.10
 
 ### 🐛 Safe Window Initialization & Robust 50/50 Geometry

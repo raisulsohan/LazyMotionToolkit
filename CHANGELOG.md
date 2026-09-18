@@ -2,6 +2,12 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.3
+
+### 🐛 Visual Hotfix
+- Fixed overlapping path artifacts in `fillRoundRect` for active buttons by using solid pre-blended colors (`#25294E` and `#363D85`) instead of semi-transparent brushes.
+- Fixed clipped checkbox text by separating the vector box (`iconbutton`) and text (`statictext`) into their own horizontal layouts.
+
 ## 1.8.2
 
 ### 🎨 Visual Refinements (Figma Accuracy)

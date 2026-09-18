@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.2";
+    var _buildVersion     = "1.8.3";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2577,20 +2577,20 @@
 
         // ---- Theme Colors (matches src/index.css) ----
         var C = {
-            bgBase:        [0.055, 0.059, 0.067, 1], // #0e0f11
-            bgPanel:       [0.078, 0.082, 0.094, 1], // #141518
-            bgButton:      [0.133, 0.141, 0.157, 1], // #222428
-            bgButtonHover: [0.165, 0.173, 0.196, 1], // #2a2c32
-            borderSubtle:  [0.165, 0.173, 0.196, 1], // #2a2c32
-            borderMedium:  [0.180, 0.188, 0.224, 1], // #2e3039
-            textPrimary:   [0.910, 0.914, 0.937, 1], // #e8e9ef
-            textSecondary: [0.569, 0.588, 0.639, 1], // #9196a3
-            textMuted:     [0.369, 0.384, 0.431, 1], // #5e626e
-            accent:        [0.345, 0.396, 0.949, 1], // #5865f2
-            accentHover:   [0.278, 0.322, 0.769, 1], // #4752c4
-            accentRed:     [0.929, 0.259, 0.271, 1], // #ed4245
-            activeTint:    [0.345, 0.396, 0.949, 0.25],
-            activeBorder:  [0.345, 0.396, 0.949, 0.5],
+            bgBase:        [0.055, 0.059, 0.067, 1],
+            bgPanel:       [0.078, 0.082, 0.094, 1],
+            bgButton:      [0.133, 0.141, 0.157, 1],
+            bgButtonHover: [0.165, 0.173, 0.196, 1],
+            borderSubtle:  [0.165, 0.173, 0.196, 1],
+            borderMedium:  [0.180, 0.188, 0.224, 1],
+            textPrimary:   [0.910, 0.914, 0.937, 1],
+            textSecondary: [0.569, 0.588, 0.639, 1],
+            textMuted:     [0.450, 0.460, 0.500, 1],
+            accent:        [0.345, 0.396, 0.949, 1],
+            accentHover:   [0.278, 0.322, 0.769, 1],
+            accentRed:     [0.929, 0.259, 0.271, 1],
+            activeTint:    [0.145, 0.161, 0.308, 1],
+            activeBorder:  [0.211, 0.239, 0.521, 1],
             activeText:    [0.545, 0.584, 0.973, 1],
             white:         [1.000, 1.000, 1.000, 1]
         };
@@ -2656,11 +2656,18 @@
             return btn;
         }
 
-        /** Styles a Figma-styled checkbox using an iconbutton */
-        function styleCheckbox(btn, text, defaultVal) {
+        /** Creates a Figma-styled checkbox using an iconbutton and statictext */
+        function createCheckbox(parent, text, defaultVal) {
+            var grp = parent.add("group");
+            grp.orientation = "row";
+            grp.alignChildren = ["left", "center"];
+            grp.spacing = 4;
+            
+            var btn = grp.add("iconbutton", undefined, undefined);
+            btn.preferredSize = [14, 14];
             btn.value = defaultVal;
             btn.text = text; // Just for tests to find
-            btn.preferredSize = [16 + text.length * 6, 16];
+            
             btn.onDraw = function() {
                 var g = this.graphics;
                 var w = this.size[0], h = this.size[1];
@@ -2672,20 +2679,21 @@
                 var bgBrush = g.newBrush(g.BrushType.SOLID_COLOR, boxBg);
                 var brdBrush = g.newBrush(g.BrushType.SOLID_COLOR, boxBrd);
                 
-                var bx = 0, by = (h - 14) / 2;
-                fillRoundRect(g, brdBrush, bx, by, 14, 14, 2);
-                fillRoundRect(g, bgBrush, bx+1, by+1, 12, 12, 1);
+                fillRoundRect(g, brdBrush, 0, 0, w, h, 2);
+                fillRoundRect(g, bgBrush, 1, 1, w-2, h-2, 1);
                 
                 if (this.value) {
                     var pen = g.newPen(g.PenType.SOLID_COLOR, C.white, 1.5);
-                    g.newPath(); g.moveTo(bx + 3, by + 7); g.lineTo(bx + 6, by + 10); g.lineTo(bx + 11, by + 4); g.strokePath(pen);
+                    g.newPath(); g.moveTo(3, 7); g.lineTo(6, 10); g.lineTo(11, 4); g.strokePath(pen);
                 }
-                
-                var font = ScriptUI.newFont("sans", "REGULAR", 10);
-                var textPen = g.newPen(g.PenType.SOLID_COLOR, C.textSecondary, 1);
-                g.drawString(text, textPen, bx + 18, by + 2, font);
             };
             btn.onClick = function() { this.value = !this.value; this.notify("onDraw"); };
+            
+            var lbl = grp.add("statictext", undefined, text);
+            lbl.graphics.font = ScriptUI.newFont("sans", "REGULAR", 10);
+            try { lbl.graphics.foregroundColor = grp.graphics.newPen(grp.graphics.PenType.SOLID_COLOR, C.textSecondary, 1); } catch (e) {}
+            lbl.addEventListener("mousedown", function() { btn.notify("onClick"); });
+            
             return btn;
         }
 
@@ -2932,19 +2940,15 @@
         var hCheckRow1 = headCol.add("group");
         hCheckRow1.orientation = "row";
         hCheckRow1.spacing = 8;
-        var chkRoundCorners = hCheckRow1.add("iconbutton", undefined, undefined);
-        styleCheckbox(chkRoundCorners, "Round", false);
-        var chkDoubleSided = hCheckRow1.add("iconbutton", undefined, undefined);
-        styleCheckbox(chkDoubleSided, "Double", false);
+        var chkRoundCorners = createCheckbox(hCheckRow1, "Round", false);
+        var chkDoubleSided = createCheckbox(hCheckRow1, "Double", false);
 
         var hCheckRow2 = headCol.add("group");
         hCheckRow2.orientation = "row";
         hCheckRow2.alignChildren = ["left", "center"];
         hCheckRow2.spacing = 4;
-        var chkReverseDir = hCheckRow2.add("iconbutton", undefined, undefined);
-        styleCheckbox(chkReverseDir, "Rev", false);
-        var chkAnimate = hCheckRow2.add("iconbutton", undefined, undefined);
-        styleCheckbox(chkAnimate, "Anim:", true);
+        var chkReverseDir = createCheckbox(hCheckRow2, "Rev", false);
+        var chkAnimate = createCheckbox(hCheckRow2, "Anim:", true);
         var inputAnimFrames = hCheckRow2.add("edittext", undefined, "30");
         inputAnimFrames.characters = 3;
 
@@ -3069,12 +3073,9 @@
         var fOptsRow = fadeCol.add("group");
         fOptsRow.orientation = "row";
         fOptsRow.spacing = 6;
-        var chkFadeIn = fOptsRow.add("iconbutton", undefined, undefined);
-        styleCheckbox(chkFadeIn, "In", true);
-        var chkFadeOut = fOptsRow.add("iconbutton", undefined, undefined);
-        styleCheckbox(chkFadeOut, "Out", true);
-        var chkMarkers = fOptsRow.add("iconbutton", undefined, undefined);
-        styleCheckbox(chkMarkers, "Markers", true);
+        var chkFadeIn = createCheckbox(fOptsRow, "In", true);
+        var chkFadeOut = createCheckbox(fOptsRow, "Out", true);
+        var chkMarkers = createCheckbox(fOptsRow, "Markers", true);
 
         var fActionsRow = fadeCol.add("group");
         fActionsRow.orientation = "row";

@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.9";
+    var _buildVersion     = "1.8.10";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2747,7 +2747,7 @@
             leftHdr.alignChildren = ["left", "center"];
             leftHdr.spacing = 6;
             leftHdr.alignment = ["fill", "center"];
-            leftHdr.preferredSize.width = 10;
+            leftHdr.preferredSize.width = 240;
 
             var lbl1 = leftHdr.add("statictext", undefined, title1.toUpperCase());
             lbl1.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
@@ -2763,7 +2763,7 @@
             rightHdr.alignChildren = ["left", "center"];
             rightHdr.spacing = 6;
             rightHdr.alignment = ["fill", "center"];
-            rightHdr.preferredSize.width = 10;
+            rightHdr.preferredSize.width = 240;
 
             var lbl2 = rightHdr.add("statictext", undefined, title2.toUpperCase());
             lbl2.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
@@ -2950,7 +2950,7 @@
         headCol.alignChildren = ["fill", "top"];
         headCol.spacing = 4;
         headCol.alignment = ["fill", "bottom"];
-        headCol.preferredSize.width = 10;
+        headCol.preferredSize.width = 240;
 
         var hTypeRow = headCol.add("group");
         hTypeRow.orientation = "row";
@@ -3002,7 +3002,7 @@
         anchorCol.alignChildren = ["fill", "top"];
         anchorCol.spacing = 4;
         anchorCol.alignment = ["fill", "bottom"];
-        anchorCol.preferredSize.width = 10;
+        anchorCol.preferredSize.width = 240;
 
         var activeAnchorIdx = 4; // Default to Center '●'
         var dirChars = ['↖', '↑', '↗', '←', '●', '→', '↙', '↓', '↘'];
@@ -3068,7 +3068,7 @@
         fadeCol.alignChildren = ["fill", "top"];
         fadeCol.spacing = 4;
         fadeCol.alignment = ["fill", "bottom"];
-        fadeCol.preferredSize.width = 10;
+        fadeCol.preferredSize.width = 240;
 
         var fParamsRow = fadeCol.add("group");
         fParamsRow.orientation = "row";
@@ -3142,7 +3142,7 @@
         swatchCol.alignChildren = ["fill", "top"];
         swatchCol.spacing = 4;
         swatchCol.alignment = ["fill", "bottom"];
-        swatchCol.preferredSize.width = 10;
+        swatchCol.preferredSize.width = 240;
 
         var swCtrlRow = swatchCol.add("group");
         swCtrlRow.orientation = "row";
@@ -3286,42 +3286,43 @@
         try { footer.graphics.foregroundColor = win.graphics.newPen(win.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (eF) {}
 
         function syncTwoColumnWidths() {
-            var curW = 0;
-            if (win.size && win.size[0] > 0) {
-                curW = win.size[0];
-            } else if (win.preferredSize && win.preferredSize[0] > 0) {
-                curW = win.preferredSize[0];
-            }
-            if (curW <= 0) curW = 400;
+            try {
+                var curW = 0;
+                if (win.size && win.size[0] > 0) {
+                    curW = win.size[0];
+                } else if (win.preferredSize && win.preferredSize[0] > 0) {
+                    curW = win.preferredSize[0];
+                }
+                if (curW <= 0) return;
 
-            // 24 = margins (12 left + 12 right), 4 = spacing between the two columns
-            var colW = Math.floor((curW - 24 - 4) / 2);
-            if (colW < 140) colW = 140;
+                // 24 = margins (12 left + 12 right), 4 = spacing between the two columns
+                var colW = Math.floor((curW - 24 - 4) / 2);
+                if (colW < 140) colW = 140;
 
-            if (hdr1 && hdr1.leftHdr) hdr1.leftHdr.preferredSize.width = colW;
-            if (hdr1 && hdr1.rightHdr) hdr1.rightHdr.preferredSize.width = colW;
-            if (headCol) headCol.preferredSize.width = colW;
-            if (anchorCol) anchorCol.preferredSize.width = colW;
+                if (hdr1 && hdr1.leftHdr) hdr1.leftHdr.preferredSize.width = colW;
+                if (hdr1 && hdr1.rightHdr) hdr1.rightHdr.preferredSize.width = colW;
+                if (headCol) headCol.preferredSize.width = colW;
+                if (anchorCol) anchorCol.preferredSize.width = colW;
 
-            if (hdr2 && hdr2.leftHdr) hdr2.leftHdr.preferredSize.width = colW;
-            if (hdr2 && hdr2.rightHdr) hdr2.rightHdr.preferredSize.width = colW;
-            if (fadeCol) fadeCol.preferredSize.width = colW;
-            if (swatchCol) swatchCol.preferredSize.width = colW;
+                if (hdr2 && hdr2.leftHdr) hdr2.leftHdr.preferredSize.width = colW;
+                if (hdr2 && hdr2.rightHdr) hdr2.rightHdr.preferredSize.width = colW;
+                if (fadeCol) fadeCol.preferredSize.width = colW;
+                if (swatchCol) swatchCol.preferredSize.width = colW;
+            } catch (eSync) {}
         }
 
         win.onResizing = win.onResize = function () {
-            syncTwoColumnWidths();
-            this.layout.resize();
+            try {
+                syncTwoColumnWidths();
+                this.layout.resize();
+            } catch (eR) {}
         };
 
         if (win instanceof Window) {
             win.center();
             win.show();
-            syncTwoColumnWidths();
-            win.layout.resize();
         } else {
             win.layout.layout(true);
-            syncTwoColumnWidths();
             win.layout.resize();
         }
 

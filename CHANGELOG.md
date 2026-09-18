@@ -2,6 +2,12 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.10
+
+### 🐛 Safe Window Initialization & Robust 50/50 Geometry
+- **Fixed ScriptUI Resize Exception:** Removed unsafe secondary `win.layout.resize()` invocation on floating `Window` instances during launch, resolving the `cannot get value of location property for statictext` runtime error.
+- **Equal Base Column Geometry (240px):** Preset initial `preferredSize.width = 240` on all 2-column groups (`Head to Line`, `Anchor`, `Fade`, `Swatch`, and dual headers) so they start in exact symmetry on show without requiring dynamic force-relayout.
+
 ## 1.8.9
 
 ### 📐 Dynamic 50/50 Column Symmetry & Left-Aligned Swatches

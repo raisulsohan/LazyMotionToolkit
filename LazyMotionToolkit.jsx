@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.15";
+    var _buildVersion     = "1.8.16";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -942,8 +942,9 @@
      * the visible glyphs actually are.
      */
     function createMeasureLayer(comp, tempName, unit, origName) {
+        var measName = origName + MEASURE_TAG;
         var m = comp.layer(tempName).duplicate();
-        m.name = origName + MEASURE_TAG;
+        m.name = measName;
         removeProperties(m.property("ADBE Text Properties").property("ADBE Text Animators"));
         removeProperties(m.property("ADBE Effect Parade"));
         try {
@@ -956,12 +957,14 @@
         try { m.shy = true; } catch (e3) {}
         try { m.motionBlur = false; } catch (e4) {}
         try { m.label = 0; } catch (e5) {}
-        m.enabled = true; // sourceRectAtTime only reports on a layer AE evaluates
-        m.parent = comp.layer(tempName); // keeps its place, and survives renaming the text layer
+        m.enabled = true;
+        // Set parent BEFORE moveAfter — parent doesn't shift indices.
+        m.parent = comp.layer(tempName);
         m.property("ADBE Text Properties").property("ADBE Text Document").expression = measureSourceExpression(unit);
-        m.moveAfter(comp.layer(tempName));
-        m.selected = false;
-        return m;
+        // moveAfter shifts indices, invalidating m. Re-fetch afterwards.
+        comp.layer(measName).moveAfter(comp.layer(tempName));
+        try { comp.layer(measName).selected = false; } catch (e6) {}
+        return measName;
     }
 
     function buildTypeAnimators(comp, tempName, style, o, fontSize) {
@@ -1001,31 +1004,36 @@
     }
 
     function buildBoxLayer(comp, tempName, o, wantsReveal, origName) {
+        var boxName = origName + BOX_TAG;
         var box = comp.layers.addShape();
-        box.name = origName + BOX_TAG;
-        var txtLyr = comp.layer(tempName);
-        box.moveAfter(txtLyr);
-        box.parent = txtLyr;
+        box.name = boxName;
+        // Set parent BEFORE moveAfter — parent doesn't shift indices.
+        box.parent = comp.layer(tempName);
+        // moveAfter shifts indices, invalidating both box and any txtLyr ref.
+        comp.layer(boxName).moveAfter(comp.layer(tempName));
+        // From here on, always re-fetch box by name.
+        var bx = comp.layer(boxName);
 
-        addSliderControl(box, "Padding X", o.padX);
-        addSliderControl(box, "Padding Y", o.padY);
-        addSliderControl(box, "Roundness", o.roundness);
-        addSliderControl(box, "Box Opacity", 100);
-        addColorControl(box, "Box Color", [o.boxColor[0], o.boxColor[1], o.boxColor[2], 1]);
-        addSliderControl(box, "Box Lead", o.lead);
-        addSliderControl(box, "Box Smooth", o.smooth);
-        addSliderControl(box, "Box Fade", wantsReveal ? o.fade : 0);
-        addCheckboxControl(box, "Caret", (o.caret && wantsReveal) ? 1 : 0);
-        addSliderControl(box, "Caret Width", o.caretWidth);
-        addSliderControl(box, "Caret Gap", Math.max(2, Math.round(o.caretWidth * 0.6)));
-        addSliderControl(box, "Caret Blink", o.caretBlink);
-        addColorControl(box, "Caret Color", [o.caretColor[0], o.caretColor[1], o.caretColor[2], 1]);
-        var rectCtrl = addPointControl(box, "Box Rect", [0, 0]);
-        var centerCtrl = addPointControl(box, "Box Center", [0, 0]);
+        addSliderControl(bx, "Padding X", o.padX);
+        addSliderControl(bx, "Padding Y", o.padY);
+        addSliderControl(bx, "Roundness", o.roundness);
+        addSliderControl(bx, "Box Opacity", 100);
+        addColorControl(bx, "Box Color", [o.boxColor[0], o.boxColor[1], o.boxColor[2], 1]);
+        addSliderControl(bx, "Box Lead", o.lead);
+        addSliderControl(bx, "Box Smooth", o.smooth);
+        addSliderControl(bx, "Box Fade", wantsReveal ? o.fade : 0);
+        addCheckboxControl(bx, "Caret", (o.caret && wantsReveal) ? 1 : 0);
+        addSliderControl(bx, "Caret Width", o.caretWidth);
+        addSliderControl(bx, "Caret Gap", Math.max(2, Math.round(o.caretWidth * 0.6)));
+        addSliderControl(bx, "Caret Blink", o.caretBlink);
+        addColorControl(bx, "Caret Color", [o.caretColor[0], o.caretColor[1], o.caretColor[2], 1]);
+        var rectCtrl = addPointControl(bx, "Box Rect", [0, 0]);
+        var centerCtrl = addPointControl(bx, "Box Center", [0, 0]);
         rectCtrl.property(1).expression = exprMeasuredSize();
         centerCtrl.property(1).expression = exprMeasuredCenter();
 
-        var contents = box.property("ADBE Root Vectors Group");
+        bx = comp.layer(boxName);
+        var contents = bx.property("ADBE Root Vectors Group");
 
         // The caret group is added first so it draws in front of the box fill.
         var caretGrp = contents.addProperty("ADBE Vector Group");
@@ -1060,12 +1068,13 @@
             .property("ADBE Vector Fill Color").expression =
                 "try { effect(\"Box Color\")(\"Color\"); } catch (e) { [0.1, 0.11, 0.13, 1]; }";
 
-        var tr = box.property("ADBE Transform Group");
+        bx = comp.layer(boxName);
+        var tr = bx.property("ADBE Transform Group");
         tr.property("ADBE Anchor Point").setValue([0, 0, 0]);
         tr.property("ADBE Position").setValue([0, 0, 0]);
         tr.property("ADBE Scale").setValue([100, 100, 100]);
         tr.property("ADBE Opacity").expression = exprBoxOpacity();
-        return box;
+        return boxName;
     }
 
     /** Everything Auto Box ever added to `textLayer`, so re-running replaces instead of stacking. */

@@ -2,6 +2,11 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.16
+
+### 🐛 Bug Fixes
+- **Auto Box: moveAfter invalidation fix:** `moveAfter()` shifts layer indices, invalidating both the moved layer and any cached references to other layers. Fixed `buildBoxLayer` and `createMeasureLayer` to set `.parent` before calling `moveAfter()` (parent assignment doesn't shift indices), then re-fetch every layer reference by name after the move. Returns layer names instead of stale object references.
+
 ## 1.8.15
 
 ### 🐛 Bug Fixes

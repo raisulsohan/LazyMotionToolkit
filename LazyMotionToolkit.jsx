@@ -2672,17 +2672,9 @@
             lbl.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
             try { lbl.graphics.foregroundColor = parent.graphics.newPen(parent.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
 
-            var div = hdr.add("customControl", undefined);
+            var div = hdr.add("panel");
             div.alignment = ["fill", "center"];
-            div.preferredSize = [-1, 1];
-            div.maximumSize = [1000, 1];
-            div.onDraw = function () {
-                var p = this.graphics.newPen(this.graphics.PenType.SOLID_COLOR, C.borderSubtle, 1);
-                this.graphics.beginPath();
-                this.graphics.moveTo(0, 0);
-                this.graphics.lineTo(this.size[0], 0);
-                this.graphics.strokePath(p);
-            };
+            div.maximumSize.height = 1;
 
             return hdr;
         }
@@ -2706,17 +2698,9 @@
             lbl1.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
             try { lbl1.graphics.foregroundColor = rowGrp.graphics.newPen(rowGrp.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
 
-            var div1 = leftHdr.add("customControl", undefined);
+            var div1 = leftHdr.add("panel");
             div1.alignment = ["fill", "center"];
-            div1.preferredSize = [-1, 1];
-            div1.maximumSize = [1000, 1];
-            div1.onDraw = function () {
-                var p = this.graphics.newPen(this.graphics.PenType.SOLID_COLOR, C.borderSubtle, 1);
-                this.graphics.beginPath();
-                this.graphics.moveTo(0, 0);
-                this.graphics.lineTo(this.size[0], 0);
-                this.graphics.strokePath(p);
-            };
+            div1.maximumSize.height = 1;
 
             // Right Header
             var rightHdr = hdrRow.add("group");
@@ -2729,17 +2713,9 @@
             lbl2.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
             try { lbl2.graphics.foregroundColor = rowGrp.graphics.newPen(rowGrp.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
 
-            var div2 = rightHdr.add("customControl", undefined);
+            var div2 = rightHdr.add("panel");
             div2.alignment = ["fill", "center"];
-            div2.preferredSize = [-1, 1];
-            div2.maximumSize = [1000, 1];
-            div2.onDraw = function () {
-                var p = this.graphics.newPen(this.graphics.PenType.SOLID_COLOR, C.borderSubtle, 1);
-                this.graphics.beginPath();
-                this.graphics.moveTo(0, 0);
-                this.graphics.lineTo(this.size[0], 0);
-                this.graphics.strokePath(p);
-            };
+            div2.maximumSize.height = 1;
 
             return hdrRow;
         }
@@ -2754,14 +2730,9 @@
         topBar.margins = [0, 0, 0, 4];
 
         // Glowing Blue Dot
-        var dot = topBar.add("customControl", undefined);
-        dot.preferredSize = [10, 10];
-        dot.onDraw = function () {
-            var g = this.graphics;
-            var br = g.newBrush(g.BrushType.SOLID_COLOR, C.accent);
-            g.ellipsePath(1, 1, 8, 8);
-            g.fillPath(br);
-        };
+        var dot = topBar.add("statictext", undefined, "●");
+        dot.graphics.font = ScriptUI.newFont("sans", "BOLD", 10);
+        try { dot.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.accent, 1); } catch (eD) {}
 
         var titleTxt = topBar.add("statictext", undefined, _scriptName);
         titleTxt.graphics.font = ScriptUI.newFont("sans", "BOLD", 11);
@@ -2775,34 +2746,14 @@
         try { authorTxt.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
 
         // Version badge pill
-        var verPill = topBar.add("customControl", undefined);
-        verPill.preferredSize = [42, 16];
-        verPill.onDraw = function () {
-            var g = this.graphics;
-            var w = this.size[0];
-            var h = this.size[1];
-            var bg = g.newBrush(g.BrushType.SOLID_COLOR, C.bgSection);
-            g.rectPath(0, 0, w, h);
-            g.fillPath(bg);
-            var pen = g.newPen(g.PenType.SOLID_COLOR, C.borderSubtle, 1);
-            g.rectPath(0.5, 0.5, w - 1, h - 1);
-            g.strokePath(pen);
-            var font = ScriptUI.newFont("sans", "BOLD", 8);
-            var txtPen = g.newPen(g.PenType.SOLID_COLOR, C.textMuted, 1);
-            g.drawString("v" + _buildVersion.replace(/\.0$/, ""), txtPen, 4, 3, font);
-        };
+        var verPill = topBar.add("statictext", undefined, "v" + _buildVersion.replace(/\.0$/, ""));
+        verPill.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
+        try { verPill.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (eV) {}
 
         // Subtle menu dots
-        var dots = topBar.add("customControl", undefined);
-        dots.preferredSize = [12, 8];
-        dots.onDraw = function () {
-            var g = this.graphics;
-            var br = g.newBrush(g.BrushType.SOLID_COLOR, C.borderMedium);
-            g.ellipsePath(1, 2, 4, 4);
-            g.fillPath(br);
-            g.ellipsePath(7, 2, 4, 4);
-            g.fillPath(br);
-        };
+        var dots = topBar.add("statictext", undefined, "••");
+        dots.graphics.font = ScriptUI.newFont("sans", "BOLD", 9);
+        try { dots.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.borderMedium, 1); } catch (eM) {}
 
         // ============================================================
         // ---- 1. Motion Tools Section ----

@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.16";
+    var _buildVersion     = "1.8.17";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -936,14 +936,22 @@
     }
 
     /**
-     * An invisible copy of the text layer whose Source Text is only the part that
-     * has been typed. `sourceRectAtTime` ignores opacity, so the real text layer
-     * always reports its full width — this copy is the only way to know how wide
-     * the visible glyphs actually are.
+     * Finds a layer's index by iterating all layers. Never stale, never throws.
+     * Returns 0 if not found.
      */
+    function findLayerIdx(comp, name) {
+        for (var i = 1; i <= comp.numLayers; i++) {
+            try { if (comp.layer(i).name === name) return i; } catch (e) {}
+        }
+        return 0;
+    }
+
     function createMeasureLayer(comp, tempName, unit, origName) {
         var measName = origName + MEASURE_TAG;
-        var m = comp.layer(tempName).duplicate();
+        var srcIdx = findLayerIdx(comp, tempName);
+        if (!srcIdx) return;
+        var m = comp.layer(srcIdx).duplicate();
+        // duplicate() places copy directly above original; m is fresh
         m.name = measName;
         removeProperties(m.property("ADBE Text Properties").property("ADBE Text Animators"));
         removeProperties(m.property("ADBE Effect Parade"));
@@ -958,13 +966,13 @@
         try { m.motionBlur = false; } catch (e4) {}
         try { m.label = 0; } catch (e5) {}
         m.enabled = true;
-        // Set parent BEFORE moveAfter — parent doesn't shift indices.
-        m.parent = comp.layer(tempName);
         m.property("ADBE Text Properties").property("ADBE Text Document").expression = measureSourceExpression(unit);
-        // moveAfter shifts indices, invalidating m. Re-fetch afterwards.
-        comp.layer(measName).moveAfter(comp.layer(tempName));
-        try { comp.layer(measName).selected = false; } catch (e6) {}
-        return measName;
+        // Set parent last. After duplicate, original shifted down by 1.
+        var parentIdx = findLayerIdx(comp, tempName);
+        if (parentIdx) {
+            try { comp.layer(findLayerIdx(comp, measName)).parent = comp.layer(parentIdx); } catch (e6) {}
+        }
+        try { comp.layer(findLayerIdx(comp, measName)).selected = false; } catch (e7) {}
     }
 
     function buildTypeAnimators(comp, tempName, style, o, fontSize) {
@@ -972,8 +980,10 @@
                     : (style.unit === "lines") ? BASED_ON.lines : BASED_ON.chars;
         var soft = style.soft && o.band > 0;
 
+        var idx = findLayerIdx(comp, tempName);
+        if (!idx) return;
         // 1. Hide everything past the caret, so the text types itself on.
-        var hide = addTextAnimator(comp.layer(tempName), TYPE_HIDE);
+        var hide = addTextAnimator(comp.layer(idx), TYPE_HIDE);
         animatorProps(hide).addProperty("ADBE Text Opacity").setValue(0);
         var hideSel = addRangeSelector(hide);
         setSelectorValue(hideSel, RANGE.basedOn, basedOn);
@@ -984,9 +994,11 @@
 
         if (!soft) return;
 
+        idx = findLayerIdx(comp, tempName);
+        if (!idx) return;
         // 2. The few units at the caret arrive offset, blurred and transparent, and
         //    land as the caret moves on. This is the part that stops it looking flat.
-        var settle = addTextAnimator(comp.layer(tempName), TYPE_SETTLE);
+        var settle = addTextAnimator(comp.layer(idx), TYPE_SETTLE);
         var sp = animatorProps(settle);
         var look = AUTOBOX_SETTLES[o.settle] || AUTOBOX_SETTLES[0];
         try { sp.addProperty("ADBE Text Opacity").setValue(0); } catch (eO) {}
@@ -1005,34 +1017,37 @@
 
     function buildBoxLayer(comp, tempName, o, wantsReveal, origName) {
         var boxName = origName + BOX_TAG;
+
+        // 1. Create shape layer — do NOT set parent or moveAfter yet.
         var box = comp.layers.addShape();
         box.name = boxName;
-        // Set parent BEFORE moveAfter — parent doesn't shift indices.
-        box.parent = comp.layer(tempName);
-        // moveAfter shifts indices, invalidating both box and any txtLyr ref.
-        comp.layer(boxName).moveAfter(comp.layer(tempName));
-        // From here on, always re-fetch box by name.
-        var bx = comp.layer(boxName);
 
-        addSliderControl(bx, "Padding X", o.padX);
-        addSliderControl(bx, "Padding Y", o.padY);
-        addSliderControl(bx, "Roundness", o.roundness);
-        addSliderControl(bx, "Box Opacity", 100);
-        addColorControl(bx, "Box Color", [o.boxColor[0], o.boxColor[1], o.boxColor[2], 1]);
-        addSliderControl(bx, "Box Lead", o.lead);
-        addSliderControl(bx, "Box Smooth", o.smooth);
-        addSliderControl(bx, "Box Fade", wantsReveal ? o.fade : 0);
-        addCheckboxControl(bx, "Caret", (o.caret && wantsReveal) ? 1 : 0);
-        addSliderControl(bx, "Caret Width", o.caretWidth);
-        addSliderControl(bx, "Caret Gap", Math.max(2, Math.round(o.caretWidth * 0.6)));
-        addSliderControl(bx, "Caret Blink", o.caretBlink);
-        addColorControl(bx, "Caret Color", [o.caretColor[0], o.caretColor[1], o.caretColor[2], 1]);
-        var rectCtrl = addPointControl(bx, "Box Rect", [0, 0]);
-        var centerCtrl = addPointControl(bx, "Box Center", [0, 0]);
-        rectCtrl.property(1).expression = exprMeasuredSize();
-        centerCtrl.property(1).expression = exprMeasuredCenter();
+        // 2. Add all effect controls (these don't change the layer stack).
+        addSliderControl(box, "Padding X", o.padX);
+        addSliderControl(box, "Padding Y", o.padY);
+        addSliderControl(box, "Roundness", o.roundness);
+        addSliderControl(box, "Box Opacity", 100);
+        addColorControl(box, "Box Color", [o.boxColor[0], o.boxColor[1], o.boxColor[2], 1]);
+        addSliderControl(box, "Box Lead", o.lead);
+        addSliderControl(box, "Box Smooth", o.smooth);
+        addSliderControl(box, "Box Fade", wantsReveal ? o.fade : 0);
+        addCheckboxControl(box, "Caret", (o.caret && wantsReveal) ? 1 : 0);
+        addSliderControl(box, "Caret Width", o.caretWidth);
+        addSliderControl(box, "Caret Gap", Math.max(2, Math.round(o.caretWidth * 0.6)));
+        addSliderControl(box, "Caret Blink", o.caretBlink);
+        addColorControl(box, "Caret Color", [o.caretColor[0], o.caretColor[1], o.caretColor[2], 1]);
+        addPointControl(box, "Box Rect", [0, 0]);
+        addPointControl(box, "Box Center", [0, 0]);
 
-        bx = comp.layer(boxName);
+        // 3. Set expressions on the point controls we just added.
+        var boxIdx = findLayerIdx(comp, boxName);
+        var bx = comp.layer(boxIdx);
+        findEffectByName(bx, "Box Rect").property(1).expression = exprMeasuredSize();
+        findEffectByName(bx, "Box Center").property(1).expression = exprMeasuredCenter();
+
+        // 4. Build shape contents.
+        boxIdx = findLayerIdx(comp, boxName);
+        bx = comp.layer(boxIdx);
         var contents = bx.property("ADBE Root Vectors Group");
 
         // The caret group is added first so it draws in front of the box fill.
@@ -1068,29 +1083,51 @@
             .property("ADBE Vector Fill Color").expression =
                 "try { effect(\"Box Color\")(\"Color\"); } catch (e) { [0.1, 0.11, 0.13, 1]; }";
 
-        bx = comp.layer(boxName);
+        // 5. Transform
+        boxIdx = findLayerIdx(comp, boxName);
+        bx = comp.layer(boxIdx);
         var tr = bx.property("ADBE Transform Group");
         tr.property("ADBE Anchor Point").setValue([0, 0, 0]);
         tr.property("ADBE Position").setValue([0, 0, 0]);
         tr.property("ADBE Scale").setValue([100, 100, 100]);
         tr.property("ADBE Opacity").expression = exprBoxOpacity();
+
+        // 6. Parent + reorder — LAST step, using fresh index lookups.
+        boxIdx = findLayerIdx(comp, boxName);
+        var txtIdx = findLayerIdx(comp, tempName);
+        if (boxIdx && txtIdx) {
+            try { comp.layer(boxIdx).parent = comp.layer(txtIdx); } catch (eP) {}
+            // Re-fetch after parent (may invalidate refs)
+            boxIdx = findLayerIdx(comp, boxName);
+            txtIdx = findLayerIdx(comp, tempName);
+            if (boxIdx && txtIdx && boxIdx !== txtIdx + 1) {
+                try { comp.layer(boxIdx).moveTo(txtIdx + 1); } catch (eM) {}
+            }
+        }
         return boxName;
     }
 
     /** Everything Auto Box ever added to `textLayer`, so re-running replaces instead of stacking. */
     function removeAutoBoxRig(comp, tempName) {
         var removed = 0;
+        var txtIdx = findLayerIdx(comp, tempName);
+        if (!txtIdx) return removed;
         for (var i = comp.numLayers; i >= 1; i--) {
-            var l = comp.layer(i);
-            var mine = false;
-            try { mine = (l.parent !== null && l.parent.index === comp.layer(tempName).index); } catch (e) {}
-            if (!mine) continue;
-            if (l.name.indexOf(BOX_TAG) < 0 && l.name.indexOf(MEASURE_TAG) < 0) continue;
-            try { l.remove(); removed++; } catch (e2) {}
+            try {
+                var l = comp.layer(i);
+                if (l.parent !== null && l.parent.index === txtIdx) {
+                    if (l.name.indexOf(BOX_TAG) >= 0 || l.name.indexOf(MEASURE_TAG) >= 0) {
+                        l.remove(); removed++;
+                        // After remove, txtIdx may shift. Re-find it.
+                        txtIdx = findLayerIdx(comp, tempName);
+                        if (!txtIdx) break;
+                    }
+                }
+            } catch (e) {}
         }
-        var txtLyr = comp.layer(tempName);
-        if (!txtLyr) return removed;
-        var animators = txtLyr.property("ADBE Text Properties").property("ADBE Text Animators");
+        txtIdx = findLayerIdx(comp, tempName);
+        if (!txtIdx) return removed;
+        var animators = comp.layer(txtIdx).property("ADBE Text Properties").property("ADBE Text Animators");
         if (animators) {
             for (var a = animators.numProperties; a >= 1; a--) {
                 var nm = animators.property(a).name;
@@ -1101,7 +1138,9 @@
         }
         var fxNames = [FX_REVEAL, FX_BAND];
         for (var f = 0; f < fxNames.length; f++) {
-            var fx = findEffectByName(comp.layer(tempName), fxNames[f]);
+            txtIdx = findLayerIdx(comp, tempName);
+            if (!txtIdx) break;
+            var fx = findEffectByName(comp.layer(txtIdx), fxNames[f]);
             if (fx) { try { fx.remove(); removed++; } catch (e4) {} }
         }
         return removed;
@@ -1110,7 +1149,9 @@
     function createAutoBox(comp, tempName, o, origName) {
         var style = AUTOBOX_STYLES[o.style] || AUTOBOX_STYLES[0];
 
-        var doc = comp.layer(tempName).property("ADBE Text Properties").property("ADBE Text Document").value;
+        var txtIdx = findLayerIdx(comp, tempName);
+        if (!txtIdx) throw new Error("Text layer not found: " + tempName);
+        var doc = comp.layer(txtIdx).property("ADBE Text Properties").property("ADBE Text Document").value;
         var fontSize = 50;
         try { if (doc.fontSize > 0) fontSize = doc.fontSize; } catch (eFs) {}
         var band = (style.band !== undefined) ? style.band : o.band;
@@ -1120,18 +1161,19 @@
 
         var wantsReveal = !style.noReveal;
         if (wantsReveal) {
-            // Each addSliderControl invalidates prior layer refs in some AE builds,
-            // so we re-fetch the layer by name for every call.
-            addSliderControl(comp.layer(tempName), FX_REVEAL, 0);
-            addSliderControl(comp.layer(tempName), FX_BAND, Math.max(0, band));
+            txtIdx = findLayerIdx(comp, tempName);
+            addSliderControl(comp.layer(txtIdx), FX_REVEAL, 0);
+            txtIdx = findLayerIdx(comp, tempName);
+            addSliderControl(comp.layer(txtIdx), FX_BAND, Math.max(0, band));
 
-            // Re-fetch the effect we just added to set keyframes on it.
-            var reveal = findEffectByName(comp.layer(tempName), FX_REVEAL).property(1);
+            txtIdx = findLayerIdx(comp, tempName);
+            var reveal = findEffectByName(comp.layer(txtIdx), FX_REVEAL).property(1);
             var units = countUnits(doc.text, style.unit);
             var frames = opts.timingPerUnit
                 ? Math.min(opts.maxFrames, Math.max(2, Math.round(units * opts.framesPerUnit)))
                 : Math.max(2, Math.round(opts.totalFrames));
-            var startTime = opts.atPlayhead ? comp.time : comp.layer(tempName).inPoint;
+            txtIdx = findLayerIdx(comp, tempName);
+            var startTime = opts.atPlayhead ? comp.time : comp.layer(txtIdx).inPoint;
             reveal.setValueAtTime(startTime, 0);
             reveal.setValueAtTime(startTime + frames / comp.frameRate, 100);
             applyRevealEase(reveal, opts.ease);

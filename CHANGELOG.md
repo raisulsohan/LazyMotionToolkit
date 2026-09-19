@@ -2,6 +2,11 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.17
+
+### 🐛 Bug Fixes
+- **Auto Box: Nuclear rewrite for reference safety.** Replaced every `comp.layer(name)` call in the Auto Box engine with a `findLayerIdx()` helper that iterates `comp.numLayers` by index — the only access pattern in ExtendScript that is immune to DOM invalidation. Removed all `moveAfter()` calls during construction (parent + reorder done as the very last step). Shape layer is fully built (effects, shapes, expressions) before any parent or move operation touches it. This eliminates every possible `ReferenceError: Object is invalid` path.
+
 ## 1.8.16
 
 ### 🐛 Bug Fixes

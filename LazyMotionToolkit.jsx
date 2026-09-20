@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.19";
+    var _buildVersion     = "1.8.20";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -973,6 +973,13 @@
         var measIdx = findLayerIdx(comp, measName);
         if (parentIdx && measIdx) {
             try { comp.layer(measIdx).parent = comp.layer(parentIdx); } catch (e6) {}
+            // Re-set position after parent to keep it at parent's origin
+            measIdx = findLayerIdx(comp, measName);
+            try {
+                var mTr = comp.layer(measIdx).property("ADBE Transform Group");
+                mTr.property("ADBE Anchor Point").setValue([0, 0, 0]);
+                mTr.property("ADBE Position").setValue([0, 0, 0]);
+            } catch (eMT) {}
         }
 
         // NOW set the expression (parent is available)
@@ -1078,45 +1085,22 @@
         tr.property("ADBE Scale").setValue([100, 100, 100]);
 
         // ── Phase 2: Set parent + reorder ──
+        // IMPORTANT: When AE sets parent, it auto-adjusts position to maintain
+        // visual position. So position [0,0,0] (comp space) becomes [-parentX, -parentY].
+        // We must RE-SET position to [0,0,0] AFTER parent to get parent-relative origin.
         boxIdx = findLayerIdx(comp, boxName);
         var txtIdx = findLayerIdx(comp, tempName);
         if (boxIdx && txtIdx) {
-            // Attempt 1: direct index-based parent
-            var parentSet = false;
+            try { comp.layer(boxIdx).parent = comp.layer(txtIdx); } catch (eP) {}
+            // Re-set transform AFTER parent so values are in parent space
+            boxIdx = findLayerIdx(comp, boxName);
             try {
-                comp.layer(boxIdx).parent = comp.layer(txtIdx);
-                parentSet = true;
-            } catch (eP1) {
-                // Attempt 2: re-fetch both fresh and try again
-                try {
-                    var bIdx2 = findLayerIdx(comp, boxName);
-                    var tIdx2 = findLayerIdx(comp, tempName);
-                    if (bIdx2 && tIdx2) {
-                        comp.layer(bIdx2).parent = comp.layer(tIdx2);
-                        parentSet = true;
-                    }
-                } catch (eP2) {}
-            }
-            if (!parentSet) {
-                // Attempt 3: iterate to find and set parent by name match
-                for (var pi = 1; pi <= comp.numLayers; pi++) {
-                    try {
-                        if (comp.layer(pi).name === boxName) {
-                            for (var pj = 1; pj <= comp.numLayers; pj++) {
-                                try {
-                                    if (comp.layer(pj).name === tempName) {
-                                        comp.layer(pi).parent = comp.layer(pj);
-                                        parentSet = true;
-                                        break;
-                                    }
-                                } catch (eInner) {}
-                            }
-                            break;
-                        }
-                    } catch (eOuter) {}
-                }
-            }
-            // Reorder: move box right below text layer
+                var tr2 = comp.layer(boxIdx).property("ADBE Transform Group");
+                tr2.property("ADBE Anchor Point").setValue([0, 0, 0]);
+                tr2.property("ADBE Position").setValue([0, 0, 0]);
+                tr2.property("ADBE Scale").setValue([100, 100, 100]);
+            } catch (eTr) {}
+            // Reorder
             boxIdx = findLayerIdx(comp, boxName);
             txtIdx = findLayerIdx(comp, tempName);
             if (boxIdx && txtIdx && boxIdx !== txtIdx + 1) {

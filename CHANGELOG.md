@@ -2,6 +2,11 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.20
+
+### 🐛 Bug Fixes
+- **Auto Box: position reset after parenting.** When AE assigns a parent to a layer, it automatically adjusts the child's position to maintain its visual position in comp space. Since position was set to `[0,0,0]` (comp space) *before* parenting, AE changed it to `[-parentX, -parentY]`, placing the box at the comp origin instead of on the text. Fixed by re-setting anchor, position and scale to `[0,0,0]` *after* parent assignment, so they're interpreted in parent space. Same fix applied to the measure layer.
+
 ## 1.8.19
 
 ### 🐛 Bug Fixes

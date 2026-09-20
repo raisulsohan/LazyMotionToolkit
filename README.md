@@ -26,13 +26,19 @@ Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.8.21** �
 
 ## 🆕 What's New in 1.8
 
+- **⚡ LazyType Reveal Rig (Auto Box Overhaul):** Complete modernization of the text typewriter experience.
+  - **Measurement Layer Engine:** Uses an invisible, guide-marked measurement layer to compute dynamic text bounds frame-by-frame with zero stepping or delay.
+  - **Character Settling Animations:** Adds expressive secondary animation to incoming characters (Blur + rise, Scale pop, Drop) with configurable settle bands.
+  - **Dynamic Animated Caret:** Optional blinking terminal-style caret with customizable width, gap, color, and blink rate synced with the typing edge.
+  - **Non-blocking Dialog Configuration:** Dedicated modal dialog to configure reveal timing (by unit or total frames), reveal easing, stroke, and styling.
 - **Figma / React Premium Dark Theme:** Rebuilt the entire ScriptUI interface based on the modern React design (`LazyMotionToolkit UI`).
+- **Interactive Header Bar & Clickable Links:** Edge-clustered header with author name and menu dots linking directly to `https://raisulsohan.com`.
+- **Pixel-Perfect 50/50 Column Geometry:** Strictly synchronized column pairs ensuring the central divider is in exact vertical alignment with the top tools.
 - **Custom Vector onDraw Buttons:** Rich dark styled buttons (`#222428`) with clean border styling and crisp centered typography.
 - **Glowing Accent Buttons:** Full-width Indigo/Blue accent (`#5865f2`) for `⚡ LazyStrike FX` and `⚡ Apply` with white typography.
 - **Interactive 9-Point Anchor Pad:** 3×3 direction grid with live active-state highlighting (matching the React UI's indigo circle indicator).
 - **Etched Section Headers:** Clean uppercase category titles with 1px horizontal etched divider lines (`#2a2c32`).
 - **Pill-Style Swatch Controls:** Color blocks with live active border indicators and mini `F` (Fill) and `S` (Stroke) pill buttons.
-
 - **⚡ LazyStrike FX** (was *QuickStrike FX*): lightning bolts, flashes and sky flashes, by timing or driven by audio.
   - Effect settings are found by match name, so it works in any After Effects language.
   - Fixed: Forking was always maxed out.
@@ -79,11 +85,13 @@ Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-sm
   * Nulls, cameras and lights are skipped and listed.
 * **`[ 📁 Precomp (Group) ]` (Group Precomp)**: Combine all selected layers into a single precomposition spanning their collective in/out. It refuses (and says why) if a selected layer's parent is not selected. With 3D layers inside, Collapse Transformations is turned on so they keep the scene's camera and lights.
 
-### 2. 📝 Pixel-Perfect Auto Text Box
-* **Zero Squish / Non-Distorting Roundness**: Unlike traditional box makers that scale layer transform scale, LazyMotionToolkit sizes the vector shape rectangle geometry directly. Corner roundness remains 100% circular and undistorted at any text length or aspect ratio.
-* **Live Typewriter & Character Tracking**: Dynamically reads Text Animators, Range Selectors (`Start`, `End`, `Offset`), and character lengths. The box expands smoothly from left to right as letters are typed in real-time.
+### 2. 📝 Pixel-Perfect Auto Text Box & LazyType Reveal
+* **LazyType Reveal Rig**: Modern typewriter animator with smooth character settling, multi-style eases, and frame-rate independent reveal control.
+* **Smart Measurement Layer**: Utilizes a hidden guide measure layer to evaluate character extents in real-time, eliminating stepped box jitter.
+* **Animated Terminal Caret**: Dynamic blinking cursor tracking the typography edge, customizable in size, gap, color, and blink speed.
+* **Zero Squish / Undistorted Geometry**: Modifies vector shape rectangle geometry directly rather than layer transform scaling. Corner roundness remains true circular geometry at any text length or aspect ratio.
 * **Fade In / Fade Out Sync**: Automatically inherits the parent text layer's `Transform > Opacity` and character animator opacity.
-* **Dedicated Effect Controls**: Adds `Padding X`, `Padding Y`, `Roundness`, `Box Opacity`, and `Box Color` controls directly to the box layer.
+* **Dedicated Effect Controls**: Adds `Padding X`, `Padding Y`, `Roundness`, `Box Opacity`, `Box Color`, `Box Lead`, `Box Smooth`, `Caret`, `Caret Width`, and `Caret Blink` controls directly to the box layer.
 
 ### 3. 🏹 Head to Line (Animated Arrows & Path Follower)
 * **1-Click Arrow & Pointer Generator**: Select any Pen-drawn line or Bezier path, choose a head style, and click **`🎯 Head it!`** to instantly attach an auto-orienting head.

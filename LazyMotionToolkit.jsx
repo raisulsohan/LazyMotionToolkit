@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.20";
+    var _buildVersion     = "1.8.21";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -1100,11 +1100,11 @@
                 tr2.property("ADBE Position").setValue([0, 0, 0]);
                 tr2.property("ADBE Scale").setValue([100, 100, 100]);
             } catch (eTr) {}
-            // Reorder
+            // Reorder: place box right below text layer in the stack
             boxIdx = findLayerIdx(comp, boxName);
             txtIdx = findLayerIdx(comp, tempName);
             if (boxIdx && txtIdx && boxIdx !== txtIdx + 1) {
-                try { comp.layer(boxIdx).moveTo(txtIdx + 1); } catch (eM) {}
+                try { comp.layer(findLayerIdx(comp, boxName)).moveAfter(comp.layer(findLayerIdx(comp, tempName))); } catch (eM) {}
             }
         }
 

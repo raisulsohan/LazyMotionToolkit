@@ -2,6 +2,11 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.21
+
+### 🐛 Bug Fixes
+- **Auto Box: layer ordering.** Box shape layer stayed at the top of the timeline (above the text), so it covered the text. `moveTo(txtIdx + 1)` silently failed because of index-shift arithmetic. Replaced with `moveAfter(textLayer)` using fresh `findLayerIdx` lookups — this directly places the box right below the text layer in the stack.
+
 ## 1.8.20
 
 ### 🐛 Bug Fixes

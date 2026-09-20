@@ -2,6 +2,11 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.18
+
+### 🐛 Bug Fixes
+- **Auto Box: expression ordering fix.** AE evaluates expressions the instant they are set. Because expressions like `exprBoxOpacity()` reference `thisLayer.parent`, setting them *before* the parent is assigned causes AE to permanently disable them ("layer has no parent"). Fixed by splitting `buildBoxLayer` into three phases: (1) create structure with values only, (2) set parent + reorder, (3) apply all expressions. This ensures `.parent` is always valid when expressions are first evaluated.
+
 ## 1.8.17
 
 ### 🐛 Bug Fixes

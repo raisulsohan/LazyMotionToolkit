@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.17";
+    var _buildVersion     = "1.8.18";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -1018,11 +1018,11 @@
     function buildBoxLayer(comp, tempName, o, wantsReveal, origName) {
         var boxName = origName + BOX_TAG;
 
-        // 1. Create shape layer — do NOT set parent or moveAfter yet.
+        // ── Phase 1: Create layer + structure (NO expressions yet) ──
         var box = comp.layers.addShape();
         box.name = boxName;
 
-        // 2. Add all effect controls (these don't change the layer stack).
+        // Effect controls (values only, no expressions)
         addSliderControl(box, "Padding X", o.padX);
         addSliderControl(box, "Padding Y", o.padY);
         addSliderControl(box, "Roundness", o.roundness);
@@ -1039,71 +1039,92 @@
         addPointControl(box, "Box Rect", [0, 0]);
         addPointControl(box, "Box Center", [0, 0]);
 
-        // 3. Set expressions on the point controls we just added.
+        // Shape contents (structure only, no expressions)
         var boxIdx = findLayerIdx(comp, boxName);
         var bx = comp.layer(boxIdx);
-        findEffectByName(bx, "Box Rect").property(1).expression = exprMeasuredSize();
-        findEffectByName(bx, "Box Center").property(1).expression = exprMeasuredCenter();
-
-        // 4. Build shape contents.
-        boxIdx = findLayerIdx(comp, boxName);
-        bx = comp.layer(boxIdx);
         var contents = bx.property("ADBE Root Vectors Group");
 
-        // The caret group is added first so it draws in front of the box fill.
         var caretGrp = contents.addProperty("ADBE Vector Group");
         caretGrp.name = "Caret";
         var caretItems = caretGrp.property("ADBE Vectors Group");
-        var caretRect = caretItems.addProperty("ADBE Vector Shape - Rect");
-        caretRect.property("ADBE Vector Rect Size").expression = exprCaretSize();
-        caretRect.property("ADBE Vector Rect Position").expression = exprCaretPosition();
-        caretRect.property("ADBE Vector Rect Roundness").setValue(Math.min(3, o.caretWidth / 2));
-        caretItems.addProperty("ADBE Vector Graphic - Fill")
-            .property("ADBE Vector Fill Color").expression =
-                "try { effect(\"Caret Color\")(\"Color\"); } catch (e) { [1, 1, 1, 1]; }";
-        try {
-            caretGrp.property("ADBE Vector Transform Group").property("ADBE Vector Group Opacity").expression = exprCaretOpacity();
-        } catch (eCO) {}
+        caretItems.addProperty("ADBE Vector Shape - Rect");
+        caretItems.property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Roundness").setValue(Math.min(3, o.caretWidth / 2));
+        caretItems.addProperty("ADBE Vector Graphic - Fill");
 
         var boxGrp = contents.addProperty("ADBE Vector Group");
         boxGrp.name = "Auto Box";
         var boxItems = boxGrp.property("ADBE Vectors Group");
-        var rect = boxItems.addProperty("ADBE Vector Shape - Rect");
-        rect.property("ADBE Vector Rect Size").expression = exprBoxSize();
-        rect.property("ADBE Vector Rect Position").expression = exprBoxPosition();
-        rect.property("ADBE Vector Rect Roundness").expression = exprBoxRoundness();
+        boxItems.addProperty("ADBE Vector Shape - Rect");
         if (o.stroke) {
-            // Above the fill, or the fill would cover it.
             var stroke = boxItems.addProperty("ADBE Vector Graphic - Stroke");
-            stroke.property("ADBE Vector Stroke Color").expression =
-                "try { effect(\"Caret Color\")(\"Color\"); } catch (e) { [1, 1, 1, 1]; }";
             stroke.property("ADBE Vector Stroke Width").setValue(Math.max(0.5, o.strokeWidth));
         }
-        boxItems.addProperty("ADBE Vector Graphic - Fill")
-            .property("ADBE Vector Fill Color").expression =
-                "try { effect(\"Box Color\")(\"Color\"); } catch (e) { [0.1, 0.11, 0.13, 1]; }";
+        boxItems.addProperty("ADBE Vector Graphic - Fill");
 
-        // 5. Transform
+        // Transform values (no expressions yet)
         boxIdx = findLayerIdx(comp, boxName);
         bx = comp.layer(boxIdx);
         var tr = bx.property("ADBE Transform Group");
         tr.property("ADBE Anchor Point").setValue([0, 0, 0]);
         tr.property("ADBE Position").setValue([0, 0, 0]);
         tr.property("ADBE Scale").setValue([100, 100, 100]);
-        tr.property("ADBE Opacity").expression = exprBoxOpacity();
 
-        // 6. Parent + reorder — LAST step, using fresh index lookups.
+        // ── Phase 2: Set parent + reorder ──
         boxIdx = findLayerIdx(comp, boxName);
         var txtIdx = findLayerIdx(comp, tempName);
         if (boxIdx && txtIdx) {
             try { comp.layer(boxIdx).parent = comp.layer(txtIdx); } catch (eP) {}
-            // Re-fetch after parent (may invalidate refs)
             boxIdx = findLayerIdx(comp, boxName);
             txtIdx = findLayerIdx(comp, tempName);
             if (boxIdx && txtIdx && boxIdx !== txtIdx + 1) {
                 try { comp.layer(boxIdx).moveTo(txtIdx + 1); } catch (eM) {}
             }
         }
+
+        // ── Phase 3: Apply ALL expressions (parent is set, so .parent works) ──
+        boxIdx = findLayerIdx(comp, boxName);
+        bx = comp.layer(boxIdx);
+
+        // Point control expressions
+        findEffectByName(bx, "Box Rect").property(1).expression = exprMeasuredSize();
+        findEffectByName(bx, "Box Center").property(1).expression = exprMeasuredCenter();
+
+        // Shape group expressions
+        var cnt = bx.property("ADBE Root Vectors Group");
+
+        // Caret group
+        var cGrp = cnt.property("Caret");
+        var cItems = cGrp.property("ADBE Vectors Group");
+        var cRect = cItems.property("ADBE Vector Shape - Rect");
+        cRect.property("ADBE Vector Rect Size").expression = exprCaretSize();
+        cRect.property("ADBE Vector Rect Position").expression = exprCaretPosition();
+        cItems.property("ADBE Vector Graphic - Fill")
+            .property("ADBE Vector Fill Color").expression =
+                "try { effect(\"Caret Color\")(\"Color\"); } catch (e) { [1, 1, 1, 1]; }";
+        try {
+            cGrp.property("ADBE Vector Transform Group").property("ADBE Vector Group Opacity").expression = exprCaretOpacity();
+        } catch (eCO) {}
+
+        // Auto Box group
+        var aGrp = cnt.property("Auto Box");
+        var aItems = aGrp.property("ADBE Vectors Group");
+        var aRect = aItems.property("ADBE Vector Shape - Rect");
+        aRect.property("ADBE Vector Rect Size").expression = exprBoxSize();
+        aRect.property("ADBE Vector Rect Position").expression = exprBoxPosition();
+        aRect.property("ADBE Vector Rect Roundness").expression = exprBoxRoundness();
+        if (o.stroke) {
+            aItems.property("ADBE Vector Graphic - Stroke")
+                .property("ADBE Vector Stroke Color").expression =
+                    "try { effect(\"Caret Color\")(\"Color\"); } catch (e) { [1, 1, 1, 1]; }";
+        }
+        aItems.property("ADBE Vector Graphic - Fill")
+            .property("ADBE Vector Fill Color").expression =
+                "try { effect(\"Box Color\")(\"Color\"); } catch (e) { [0.1, 0.11, 0.13, 1]; }";
+
+        // Transform expression
+        boxIdx = findLayerIdx(comp, boxName);
+        comp.layer(boxIdx).property("ADBE Transform Group").property("ADBE Opacity").expression = exprBoxOpacity();
+
         return boxName;
     }
 

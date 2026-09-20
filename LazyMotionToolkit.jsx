@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.18";
+    var _buildVersion     = "1.8.19";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -966,11 +966,19 @@
         try { m.motionBlur = false; } catch (e4) {}
         try { m.label = 0; } catch (e5) {}
         m.enabled = true;
-        m.property("ADBE Text Properties").property("ADBE Text Document").expression = measureSourceExpression(unit);
-        // Set parent last. After duplicate, original shifted down by 1.
+
+        // Set parent BEFORE setting the Source Text expression
+        // (the expression uses thisLayer.parent, so parent must exist first)
         var parentIdx = findLayerIdx(comp, tempName);
-        if (parentIdx) {
-            try { comp.layer(findLayerIdx(comp, measName)).parent = comp.layer(parentIdx); } catch (e6) {}
+        var measIdx = findLayerIdx(comp, measName);
+        if (parentIdx && measIdx) {
+            try { comp.layer(measIdx).parent = comp.layer(parentIdx); } catch (e6) {}
+        }
+
+        // NOW set the expression (parent is available)
+        measIdx = findLayerIdx(comp, measName);
+        if (measIdx) {
+            comp.layer(measIdx).property("ADBE Text Properties").property("ADBE Text Document").expression = measureSourceExpression(unit);
         }
         try { comp.layer(findLayerIdx(comp, measName)).selected = false; } catch (e7) {}
     }
@@ -1073,7 +1081,42 @@
         boxIdx = findLayerIdx(comp, boxName);
         var txtIdx = findLayerIdx(comp, tempName);
         if (boxIdx && txtIdx) {
-            try { comp.layer(boxIdx).parent = comp.layer(txtIdx); } catch (eP) {}
+            // Attempt 1: direct index-based parent
+            var parentSet = false;
+            try {
+                comp.layer(boxIdx).parent = comp.layer(txtIdx);
+                parentSet = true;
+            } catch (eP1) {
+                // Attempt 2: re-fetch both fresh and try again
+                try {
+                    var bIdx2 = findLayerIdx(comp, boxName);
+                    var tIdx2 = findLayerIdx(comp, tempName);
+                    if (bIdx2 && tIdx2) {
+                        comp.layer(bIdx2).parent = comp.layer(tIdx2);
+                        parentSet = true;
+                    }
+                } catch (eP2) {}
+            }
+            if (!parentSet) {
+                // Attempt 3: iterate to find and set parent by name match
+                for (var pi = 1; pi <= comp.numLayers; pi++) {
+                    try {
+                        if (comp.layer(pi).name === boxName) {
+                            for (var pj = 1; pj <= comp.numLayers; pj++) {
+                                try {
+                                    if (comp.layer(pj).name === tempName) {
+                                        comp.layer(pi).parent = comp.layer(pj);
+                                        parentSet = true;
+                                        break;
+                                    }
+                                } catch (eInner) {}
+                            }
+                            break;
+                        }
+                    } catch (eOuter) {}
+                }
+            }
+            // Reorder: move box right below text layer
             boxIdx = findLayerIdx(comp, boxName);
             txtIdx = findLayerIdx(comp, tempName);
             if (boxIdx && txtIdx && boxIdx !== txtIdx + 1) {

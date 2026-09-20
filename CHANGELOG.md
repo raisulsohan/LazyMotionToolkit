@@ -2,6 +2,12 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.19
+
+### 🐛 Bug Fixes
+- **Auto Box: parent-before-expression in both box AND measure layers.** The same expression-ordering bug existed in `createMeasureLayer` too — `measureSourceExpression` references `thisLayer.parent`, so parent must be set first. Moved parent assignment above expression assignment in both functions.
+- **Robust parent assignment with 3 fallback attempts.** If the first parent assignment fails, re-fetches indices and tries again. If that also fails, does a full nested iteration of all layers. This ensures parent is set even under the most aggressive DOM invalidation.
+
 ## 1.8.18
 
 ### 🐛 Bug Fixes

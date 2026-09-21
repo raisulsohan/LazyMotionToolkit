@@ -20,7 +20,7 @@
   <a href="#-author--credits">Credits</a>
 </p>
 
-Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.8.21** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.8.22** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
 
 ---
 
@@ -178,7 +178,7 @@ Like Premiere Pro's *Render In to Out*.
 
 ### Method 1: Installer (Recommended)
 
-1. Download **`LazyMotionToolkit-v1.6.zip`** from the [latest release](https://github.com/raisulsohan/LazyMotionToolkit/releases/latest) and unzip it.
+1. Download the **`LazyMotionToolkit-v*.zip`** from the [latest release](https://github.com/raisulsohan/LazyMotionToolkit/releases/latest) and unzip it.
 2. **Windows:** double-click `Install LazyMotionToolkit.bat` and click **Yes** when Windows asks for administrator rights.  
    **macOS:** double-click `Install LazyMotionToolkit (macOS).command` (if macOS refuses, right-click → Open) and type your Mac password if asked.
 3. Restart After Effects and open **Window > LazyMotionToolkit.jsx**.

@@ -59,10 +59,23 @@
         // it without a UI ends the app, so it is used as it is.
         lines.push("step: project (" + (app.project ? app.project.numItems + " items" : "none") + ")");
         flush(false);
-        if (!app.project || app.project.numItems > 0 || app.project.file) {
-            check("an empty untitled project to work in", false, "After Effects opened a project; not touching it");
-            throw new Error("not an empty project");
+        // A previous headless run can leave After Effects reopening a recovered
+        // untitled project. That is never saved work, so it is thrown away and a
+        // fresh one started. Anything with a file on disk is left alone.
+        if (!app.project) {
+            check("a project to work in", false, "no project");
+            throw new Error("no project");
         }
+        if (app.project.file) {
+            check("no saved project of yours is open", false, app.project.file.fsName + " is open; not touching it");
+            throw new Error("a saved project is open");
+        }
+        if (app.project.numItems > 0) {
+            lines.push("note: discarding a recovered untitled project (" + app.project.numItems + " items)");
+            flush(false);
+            app.newProject();
+        }
+        check("an empty untitled project to work in", app.project.numItems === 0, app.project.numItems);
         var comp = app.project.items.addComp("Smoke", 1920, 1080, 1, 10, 25);
         lines.push("step: comp made");
         flush(false);

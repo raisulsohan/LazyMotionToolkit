@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.21";
+    var _buildVersion     = "1.8.22";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -747,7 +747,7 @@
     function measureSourceExpression(unit) {
         return [
             "// LazyMotion AutoBox measure",
-            "var T = thisLayer.parent;",
+            "var T = null; try { T = thisLayer.parent; } catch (eNoParent) { T = null; }",
             "if (T == null) { value; } else {",
             "    var s = \"\";",
             "    try { s = T.text.sourceText.value; } catch (e1) { s = \"\"; }",
@@ -792,7 +792,7 @@
         return [
             "// LazyMotion AutoBox " + _buildVersion,
             "function num(nm, d){ try { var v = effect(nm)(\"Slider\"); return (v == null) ? d : v; } catch (e) { return d; } }",
-            "var T = thisLayer.parent;",
+            "var T = null; try { T = thisLayer.parent; } catch (eNoParent) { T = null; }",
             "var FD = thisComp.frameDuration;",
             "function findMeasure(){",
             "    if (T == null) return null;",
@@ -830,7 +830,7 @@
         "function num(nm, d){ try { var v = effect(nm)(\"Slider\"); return (v == null) ? d : v; } catch (e) { return d; } }",
         "function flag(nm, d){ try { return effect(nm)(\"Checkbox\") ? 1 : 0; } catch (e) { return d; } }",
         "function measured(nm, d){ try { return effect(nm)(\"Point\"); } catch (e) { return d; } }",
-        "var T = thisLayer.parent;"
+        "var T = null; try { T = thisLayer.parent; } catch (eNoParent) { T = null; }"
     ].join("\n");
 
     function exprMeasuredSize() {
@@ -4140,6 +4140,19 @@
     if (typeof $ !== "undefined" && $.global && $.global.LazyMotionToolkitTest) {
         $.global.LazyMotionToolkitTest.api = {
             version: _buildVersion,
+            autoBoxLayers: autoBoxLayers,
+            createAutoBox: createAutoBox,
+            removeAutoBoxRig: removeAutoBoxRig,
+            findLayerIdx: findLayerIdx,
+            AUTOBOX_DEFAULTS: AUTOBOX_DEFAULTS,
+            AUTOBOX_STYLES: AUTOBOX_STYLES,
+            AUTOBOX_SETTLES: AUTOBOX_SETTLES,
+            BOX_TAG: BOX_TAG,
+            MEASURE_TAG: MEASURE_TAG,
+            TYPE_HIDE: TYPE_HIDE,
+            TYPE_SETTLE: TYPE_SETTLE,
+            FX_REVEAL: FX_REVEAL,
+            FX_BAND: FX_BAND,
             normalizePalette: normalizePalette,
             applySwatchColor: applySwatchColor,
             colorLayers: colorLayers,

@@ -2,6 +2,14 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.8.22
+
+### 🐛 Bug Fixes
+- **Auto Box: the box survives losing its text layer.** Every box expression opened with `var T = thisLayer.parent;`. Deleting the text layer (or unparenting the box) made that line throw, and After Effects does not just skip an expression that throws, it switches it off for good — so the box stayed broken even after an undo, and the only way back was re-running Auto Box. The parent is now read inside a try, and the `T == null` branches that were already written for it finally get used: the box quietly measures nothing and fades out instead.
+
+### 🧪 Testing
+- **`tools/ae-autobox-test.jsx`.** The Auto Box rig is the one part of the toolkit the mocked suite cannot reach, because it depends on real text measurement, real parenting and After Effects actually evaluating expressions. The new test builds the rig on real text layers in a headless After Effects and checks 79 things: that the box lands on the text to the pixel for all six styles, that nothing is left disabled, that re-running replaces instead of stacking, that two layers measure their own text, and that the caret tracks the typing. It found the bug above.
+
 ## 1.8.21
 
 ### 🐛 Bug Fixes

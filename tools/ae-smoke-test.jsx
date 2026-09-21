@@ -244,6 +244,83 @@
             text.remove(); split.remove(); card.remove();
         });
 
+        section("stagger", function () {
+            var made = [];
+            for (var s = 0; s < 4; s++) {
+                var L = comp.layers.addSolid([0.3, 0.3, 0.3], "Step " + s, 100, 100, 1, 4);
+                L.startTime = 1;
+                made.push(L);
+            }
+            // Handed over in the wrong order on purpose: the engine sorts by
+            // where the layers sit in the timeline, not by how they were picked.
+            var res = api.staggerLayers(comp, [made[2], made[0], made[3], made[1]], 5, false);
+            check("stagger: every layer moved", res.moved.length === 4, res.moved.join(","));
+            check("stagger: nothing skipped", res.skipped.length === 0, res.skipped.join(" | "));
+            var fd = 1 / comp.frameRate;
+            var starts = [];
+            for (var m = 0; m < made.length; m++) starts.push(Math.round((made[m].startTime - 1) / fd));
+            // made[0] is the topmost layer: each addSolid went in above the last.
+            check("stagger: top layer stayed put, the rest stepped 5 frames each",
+                starts[0] === 15 && starts[1] === 10 && starts[2] === 5 && starts[3] === 0, starts.join(","));
+
+            var res2 = api.staggerLayers(comp, made, -5, false);
+            var back = [];
+            for (var b = 0; b < made.length; b++) back.push(Math.round((made[b].startTime - 1) / fd));
+            check("stagger: a negative step closes it up again", back.join(",") === "0,0,0,0", back.join(","));
+
+            api.staggerLayers(comp, made, 5, true);
+            var rev = [];
+            for (var r = 0; r < made.length; r++) rev.push(Math.round((made[r].startTime - 1) / fd));
+            check("stagger: reverse starts from the bottom layer", rev.join(",") === "0,5,10,15", rev.join(","));
+
+            made[0].locked = true;
+            var res3 = api.staggerLayers(comp, made, 5, false);
+            check("stagger: a locked layer is skipped with a reason", res3.skipped.length === 1, res3.skipped.join(" | "));
+            made[0].locked = false;
+            for (var d = 0; d < made.length; d++) made[d].remove();
+        });
+
+        section("null + parent", function () {
+            var a = comp.layers.addSolid([0.2, 0.5, 0.8], "A", 100, 100, 1, 5);
+            a.property("ADBE Transform Group").property("ADBE Position").setValue([400, 300]);
+            var b = comp.layers.addSolid([0.8, 0.5, 0.2], "B", 100, 100, 1, 5);
+            b.property("ADBE Transform Group").property("ADBE Position").setValue([600, 500]);
+            var res = api.nullParentLayers(comp, [a, b]);
+            check("null: made and named", res.nullName !== "", res.nullName);
+            check("null: both layers parented", res.parented.length === 2, res.parented.join(","));
+            var nul = null;
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === res.nullName) nul = comp.layer(i);
+            }
+            check("null: it exists", !!nul);
+            if (nul) {
+                check("null: on top of the stack", nul.index === 1, nul.index);
+                var p = nul.property("ADBE Transform Group").property("ADBE Position").value;
+                check("null: centred on the selection", near(p[0], 500) && near(p[1], 400), p.join(","));
+                check("null: both layers hang off it",
+                    a.parent !== null && a.parent.index === nul.index &&
+                    b.parent !== null && b.parent.index === nul.index);
+                check("null: the layers did not move",
+                    near(probe(comp, a, [50, 50], 2)[0], 400) && near(probe(comp, b, [50, 50], 2)[0], 600));
+            }
+
+            // A layer already hanging off another selected layer keeps its parent.
+            var c = comp.layers.addSolid([0.5, 0.5, 0.5], "C", 100, 100, 1, 5);
+            c.parent = b;
+            var res2 = api.nullParentLayers(comp, [b, c]);
+            check("null: a layer that already follows a selected parent is left alone",
+                res2.parented.length === 1 && res2.skipped.length === 1, res2.parented.join(",") + " | " + res2.skipped.join(" | "));
+            check("null: it still follows its own parent", c.parent !== null && c.parent.index === b.index);
+            check("null: the second null got its own name", res2.nullName !== res.nullName,
+                res.nullName + " / " + res2.nullName);
+
+            for (var k = comp.numLayers; k >= 1; k--) {
+                var L = comp.layer(k);
+                if (L.name === "A" || L.name === "B" || L.name === "C" ||
+                    L.name === res.nullName || L.name === res2.nullName) L.remove();
+            }
+        });
+
         section("swatches", function () {
             var shape = comp.layers.addShape();
             var group = shape.property("ADBE Root Vectors Group").addProperty("ADBE Vector Group");

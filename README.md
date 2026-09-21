@@ -20,7 +20,14 @@
   <a href="#-author--credits">Credits</a>
 </p>
 
-Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.9** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.10** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+
+---
+
+## 🆕 What's New in 1.10
+
+- **Stagger.** Step the selected layers apart in time, top to bottom, by however many frames you like. It adds spacing rather than rebuilding your timing, so it is safe to run on a stack that is already animated, and a negative number closes the spread up again. `Rev` works from the bottom.
+- **Null + Parent.** One null on top, centred on the selection, everything hanging off it. A layer whose own parent is also selected keeps that parent instead of being flattened onto the null.
 
 ---
 
@@ -83,7 +90,7 @@ Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-sm
 
 ## 🌟 Overview
 
-**LazyMotionToolkit** is a lightweight, high-performance ScriptUI panel designed to eliminate repetitive motion design tasks. It unifies nine toolsets into one cohesive workflow without relying on external plugins or bloated dependencies.
+**LazyMotionToolkit** is a lightweight, high-performance ScriptUI panel designed to eliminate repetitive motion design tasks. It unifies ten toolsets into one cohesive workflow without relying on external plugins or bloated dependencies.
 
 ---
 
@@ -133,13 +140,17 @@ Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-sm
 * **Zero Visual Shift**: Compensates Position (including scale and rotation, every Position keyframe, and separated X/Y Position) so the layer does not jump when the anchor point moves. Layers with animated anchor, scale or rotation, and 3D layers, are skipped with a note, because no single offset could keep them in place.
 * **Center in Comp**: moves the centre of the layer's visible content to the centre of the comp. Parented layers are skipped, since their position isn't in comp space.
 
-### 6. ⊞ Grid Designer Dialog
+### 6. ⇥ Stagger & ◎ Null + Parent
+* **`[ ⇥ Stagger ]`**: steps the selected layers apart in time, top to bottom, by the number of frames in the box. Each layer keeps its own start, so only the spacing is added: run it on a stack that already has timing and the timing survives. `Rev` starts from the bottom layer instead, and a negative number closes the spread back up. Layers are ordered by where they sit in the timeline, not by the order you clicked them. Locked layers are skipped with a note.
+* **`[ ◎ Null + Parent ]`**: one null on top, centred on the selection, with everything selected parented to it. A layer whose own parent is also selected keeps that parent — it already follows the null through it, and re-parenting would flatten the rig you built. The null turns 3D if anything in the selection is, its anchor sits in its middle so it rotates and scales around itself, and nothing on screen moves.
+
+### 7. ⊞ Grid Designer Dialog
 * **Layout Presets**: 1-click presets for `2x2`, `3x3 Rule of Thirds`, `3 Columns Split`, and `12 Columns Web Layout`.
 * **Custom Dimensions**: Full control over Columns, Rows, Gutters (X/Y px), and Margins (X/Y px).
 * **Multiple Output Formats**: Generate solid **Shape Tiles (Fill)**, **Outline Strokes**, or **Guide Nulls**.
 * **Guard rails**: up to 400 cells; margins and gutters that leave no room are refused, and the dialog stays open to fix them.
 
-### 7. 🎨 QuickSwatch (Live Color Palette)
+### 8. 🎨 QuickSwatch (Live Color Palette)
 * **Instant Fill & Stroke**: 1-click buttons under each swatch.
   * **Shape layers**: every Fill or Stroke in their contents, nested groups included.
   * **Text layers**: fill or stroke. Stroke is switched on with a visible width.
@@ -151,7 +162,7 @@ Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-sm
 
 ---
 
-### 8. ⚡ LazyStrike FX (Lightning & Sky Flash)
+### 9. ⚡ LazyStrike FX (Lightning & Sky Flash)
 Click **`⚡ LazyStrike FX`** to open its window (it stays open while you work).
 * **Styles**:
   * `Direct Bolt + Flash`: an animated Advanced Lightning bolt plus a full-frame flash.
@@ -170,7 +181,7 @@ Click **`⚡ LazyStrike FX`** to open its window (it stays open while you work).
 * **Pre-compose** option wraps the generated layers in one precomp.
 * Layers are Add-mode solids named `LazyStrike …`; everything is one undo step.
 
-### 9. 🎬 LazyPreview Render (Smooth Playback of Heavy Comps)
+### 10. 🎬 LazyPreview Render (Smooth Playback of Heavy Comps)
 Like Premiere Pro's *Render In to Out*.
 * **`▶ Render In→Out`**:
   1. Set the work area (`B` / `N`) first.

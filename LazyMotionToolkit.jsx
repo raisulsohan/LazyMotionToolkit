@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.9.0";
+    var _buildVersion     = "1.10.0";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -2273,7 +2273,174 @@
     }
 
     // ============================================================
-    // 8. Grid Designer Dialog
+    // 8. Stagger & Null Parent
+    // ============================================================
+
+    /**
+     * Engine: step the selected layers apart in time, one step each, down the
+     * timeline. Each layer keeps its own start; only the spacing is added, so
+     * whatever you had built stays built and Undo puts it straight back.
+     * A negative step closes the spread up again.
+     */
+    function staggerLayers(comp, layers, frames, reverse) {
+        var moved = [];
+        var skipped = [];
+        app.beginUndoGroup("LazyMotion: Stagger");
+        try {
+            var targets = [];
+            for (var i = 0; i < layers.length; i++) {
+                if (layers[i].locked) {
+                    skipped.push(layers[i].name + " (locked)");
+                    continue;
+                }
+                targets.push(layers[i]);
+            }
+            // Timeline order, top first. selectedLayers comes back in the order
+            // they were clicked, which is not what anyone means by "in order".
+            targets.sort(function (a, b) { return a.index - b.index; });
+            if (reverse) targets.reverse();
+
+            // Nothing is added or removed here, so the layer references stay good.
+            var step = frames / comp.frameRate;
+            for (var t = 0; t < targets.length; t++) {
+                try {
+                    targets[t].startTime += t * step;
+                    moved.push(targets[t].name);
+                } catch (eMove) {
+                    skipped.push(targets[t].name + " (" + eMove.toString() + ")");
+                }
+            }
+        } finally {
+            app.endUndoGroup();
+        }
+        return { moved: moved, skipped: skipped };
+    }
+
+    function executeStagger(frames, reverse) {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) {
+            alert("Please open a composition first.");
+            return;
+        }
+        var selected = comp.selectedLayers;
+        if (selected.length < 2) {
+            alert("Select at least two layers to stagger.");
+            return;
+        }
+        reportSkipped("Stagger", staggerLayers(comp, selected, frames, reverse).skipped);
+    }
+
+    /** A name no layer in `comp` is using yet, so two nulls never collide. */
+    function freeLayerName(comp, base) {
+        if (!findLayerIdx(comp, base)) return base;
+        for (var n = 2; n < 500; n++) {
+            if (!findLayerIdx(comp, base + " " + n)) return base + " " + n;
+        }
+        return base + " " + new Date().getTime();
+    }
+
+    /**
+     * Engine: one null on top, with everything selected hanging off it.
+     * A layer whose own parent is also selected is left alone: it already
+     * follows the null through that parent, and re-parenting it would flatten
+     * the rig the user built.
+     */
+    function nullParentLayers(comp, layers) {
+        var parented = [];
+        var skipped = [];
+        var nullName = "";
+        app.beginUndoGroup("LazyMotion: Null + Parent");
+        try {
+            var roots = [];
+            for (var i = 0; i < layers.length; i++) {
+                var L = layers[i];
+                if (L.locked) {
+                    skipped.push(L.name + " (locked)");
+                    continue;
+                }
+                var p = null;
+                try { p = L.parent; } catch (eP) {}
+                var followsSelection = false;
+                if (p) {
+                    for (var j = 0; j < layers.length; j++) {
+                        if (layers[j].index === p.index) followsSelection = true;
+                    }
+                }
+                if (followsSelection) {
+                    skipped.push(L.name + " (already follows " + p.name + ")");
+                    continue;
+                }
+                roots.push(L);
+            }
+            if (!roots.length) return { parented: parented, skipped: skipped, nullName: "" };
+
+            // Read positions while the references are still good: adding the
+            // null shifts every index below it.
+            var sumX = 0, sumY = 0, counted = 0, any3D = false;
+            var indices = [];
+            for (var r = 0; r < roots.length; r++) {
+                indices.push(roots[r].index);
+                if (roots[r].threeDLayer) any3D = true;
+                try {
+                    if (roots[r].parent === null) {
+                        var pos = roots[r].property("ADBE Transform Group").property("ADBE Position").valueAtTime(comp.time, false);
+                        sumX += pos[0]; sumY += pos[1]; counted++;
+                    }
+                } catch (ePos) {}
+            }
+            var cx = counted ? sumX / counted : comp.width / 2;
+            var cy = counted ? sumY / counted : comp.height / 2;
+
+            nullName = freeLayerName(comp, "Control");
+            var nul = comp.layers.addNull(comp.duration);
+            nul.name = nullName;
+            var nullIdx = nul.index;
+            if (any3D) { try { nul.threeDLayer = true; } catch (e3D) {} }
+            try {
+                var tr = nul.property("ADBE Transform Group");
+                // A null is anchored at its corner; putting the anchor in the
+                // middle is what makes it rotate and scale around itself. Set
+                // from the null's own size rather than nudging the value, so a
+                // different default cannot land it on the far corner. Position
+                // is set straight after, so nothing is left visually shifted.
+                tr.property("ADBE Anchor Point").setValue([(nul.width || 100) / 2, (nul.height || 100) / 2, 0]);
+                tr.property("ADBE Position").setValue(any3D ? [cx, cy, 0] : [cx, cy]);
+            } catch (eTr) {}
+
+            for (var k = 0; k < indices.length; k++) {
+                var was = indices[k];
+                var now = (was >= nullIdx) ? was + 1 : was;
+                try {
+                    var child = comp.layer(now);
+                    child.parent = comp.layer(findLayerIdx(comp, nullName));
+                    parented.push(child.name);
+                } catch (eParent) {
+                    skipped.push("a layer could not be parented (" + eParent.toString() + ")");
+                }
+            }
+        } finally {
+            app.endUndoGroup();
+        }
+        return { parented: parented, skipped: skipped, nullName: nullName };
+    }
+
+    function executeNullParent() {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) {
+            alert("Please open a composition first.");
+            return;
+        }
+        var selected = comp.selectedLayers;
+        if (selected.length === 0) {
+            alert("Select the layers you want on a null first.");
+            return;
+        }
+        var result = nullParentLayers(comp, selected);
+        if (!result.parented.length) alert("Nothing was parented:\n" + result.skipped.join("\n"));
+    }
+
+    // ============================================================
+    // 9. Grid Designer Dialog
     // ============================================================
     var GRID_MAX_CELLS = 400;
 
@@ -2449,7 +2616,7 @@
     }
 
     // ============================================================
-    // 9. LazyStrike FX: lightning, flash and sky flash generator
+    // 10. LazyStrike FX: lightning, flash and sky flash generator
     //    (formerly the separate QuickStrike FX script)
     // ============================================================
 
@@ -2965,7 +3132,7 @@
     }
 
     // ============================================================
-    // 10. LazyPreview Render: render the work area to an H.264 file
+    // 11. LazyPreview Render: render the work area to an H.264 file
     //     in the background and play it back as a solo'd layer
     //     (formerly the separate QuickPreviewRender script)
     // ============================================================
@@ -3511,7 +3678,7 @@
     }
 
     // ============================================================
-    // 11. Main ScriptUI Window / Panel Builder (Modern Figma Theme)
+    // 12. Main ScriptUI Window / Panel Builder (Modern Figma Theme)
     // ============================================================
     function buildToolkitUI(thisObj) {
         var win = (thisObj instanceof Panel)
@@ -3908,6 +4075,48 @@
         btnGrid.alignment = ["fill", "center"];
         btnGrid.helpTip = "Open Grid Designer to create Rows, Columns, and Layouts";
         btnGrid.onClick = showGridMakerDialog;
+
+        var tRow3 = toolsGrid.add("group");
+        tRow3.orientation = "row";
+        tRow3.alignChildren = ["fill", "center"];
+        tRow3.spacing = COL_SPACING;
+
+        var staggerCol = tRow3.add("group");
+        staggerCol.orientation = "row";
+        staggerCol.alignChildren = ["fill", "center"];
+        staggerCol.spacing = 4;
+
+        var btnStagger = staggerCol.add("iconbutton", undefined, undefined);
+        styleBtn(btnStagger, "⇥ Stagger", "default", 30);
+        btnStagger.preferredSize.width = 10;
+        btnStagger.alignment = ["fill", "center"];
+        btnStagger.helpTip = "Step the selected layers apart in time, top to bottom. Each keeps its own start, so only the spacing is added; a negative number closes it up again.";
+
+        var inputStagger = staggerCol.add("edittext", undefined, "4");
+        inputStagger.characters = 3;
+        inputStagger.helpTip = "Frames between one layer and the next";
+        remember("StaggerFrames", inputStagger, "text");
+        var chkStaggerRev = remember("StaggerReverse", createCheckbox(staggerCol, "Rev", false, true), "check");
+        chkStaggerRev.helpTip = "Start from the bottom layer instead of the top";
+
+        var nullCol = tRow3.add("group");
+        nullCol.orientation = "row";
+        nullCol.alignChildren = ["fill", "center"];
+        nullCol.spacing = 4;
+        registerColumnPair(staggerCol, nullCol);
+
+        var btnNullParent = nullCol.add("iconbutton", undefined, undefined);
+        styleBtn(btnNullParent, "◎ Null + Parent", "default", 30);
+        btnNullParent.preferredSize.width = 10;
+        btnNullParent.alignment = ["fill", "center"];
+        btnNullParent.helpTip = "Put one null on top, centred on the selection, with everything selected parented to it. A layer whose own parent is also selected is left as it is.";
+
+        btnStagger.onClick = function () {
+            var f = parseFloat(inputStagger.text);
+            if (isNaN(f) || f === 0) return alert("Enter how many frames to put between the layers.");
+            executeStagger(f, chkStaggerRev.value);
+        };
+        btnNullParent.onClick = executeNullParent;
 
         var btnStrike = toolsGrid.add("iconbutton", undefined, undefined);
         styleBtn(btnStrike, "⚡ LazyStrike FX", "primary", 32);
@@ -4440,6 +4649,9 @@
             autoBoxSaveOptions: autoBoxSaveOptions,
             aeColorToHex: aeColorToHex,
             layerHasParent: layerHasParent,
+            staggerLayers: staggerLayers,
+            nullParentLayers: nullParentLayers,
+            freeLayerName: freeLayerName,
             headToLineLayers: headToLineLayers,
             executeHeadToLine: executeHeadToLine,
             createHeadShape: createHeadShape,

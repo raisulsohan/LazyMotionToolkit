@@ -2,6 +2,15 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.10.0
+
+### ✨ What is new
+- **Stagger.** The most repeated chore in motion design, and After Effects only ships Sequence Layers, which butt-joins clips end to end and nothing else. `⇥ Stagger` steps the selected layers apart in time, top to bottom, by the number of frames in the box beside it. It *adds* spacing rather than rebuilding the timing, so running it on a stack that is already animated keeps everything you built, and a negative number closes the spread back up. `Rev` works from the bottom layer up. Layers go in timeline order, not the order they were clicked, because `comp.selectedLayers` hands them back in click order and nobody means that by "in order". Locked layers are skipped with a reason.
+- **Null + Parent.** One null on top, centred on the selection, with everything selected parented to it. A layer whose own parent is also in the selection keeps that parent: it already follows the null through it, and re-parenting it would flatten the rig. The null becomes 3D if anything in the selection is, and its anchor is moved to its middle so it rotates and scales around itself rather than its corner. Nothing on screen moves.
+
+### 🧪 Testing
+- 16 more checks in `tools/ae-smoke-test.jsx`: the ordering, the reverse, the negative step that undoes a spread, a locked layer, the null landing on the selection's centre, the layers not moving, and a child of a selected parent being left alone.
+
 ## 1.9.0
 
 ### 🐛 Bug Fixes

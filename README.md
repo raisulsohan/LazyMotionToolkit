@@ -20,7 +20,18 @@
   <a href="#-author--credits">Credits</a>
 </p>
 
-Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.8.22** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.9** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+
+---
+
+## 🆕 What's New in 1.9
+
+- **The arrowhead actually turns now.** Head to Line asked After Effects for `ADBE Rotation`, which does not exist on a 2D layer; the failure was swallowed, so every head ever made sat on the end of its line pointing right, whatever the line did. Its opacity never followed the line either. Both work, and all eight head shapes are covered by a new test.
+- **Auto Box is about a third cheaper per frame.** The size and the centre each measured the text separately. Only the size needs smoothing, so the centre measures once now: 939 ms down to 657 ms over 100 frames on the same box. Long paragraphs also turn their own smoothing down, which takes a 600-character block from the slowest thing in the comp to 10.8 ms a frame.
+- **Box colour, caret colour and reveal ease are in the Auto Box dialog.** All three existed in the code and none of them had a control, so every box came out the same dark grey with the same ease.
+- **Remove box.** Undo was the only way back, and deleting the box by hand left the measure layer, the LazyType animators and the Reveal sliders behind on the text.
+- **The panel remembers your settings.** Fade length, speed, easing, head shape, the Auto Box dialog -- all of it comes back after a restart.
+- **Nothing fails in silence.** A box that could not be parented used to stay in the comp measuring nothing; now it is removed and listed with a reason. Deleting a text layer or a line no longer permanently disables the expressions on what it left behind.
 
 ---
 
@@ -92,6 +103,9 @@ Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-sm
 * **Zero Squish / Undistorted Geometry**: Modifies vector shape rectangle geometry directly rather than layer transform scaling. Corner roundness remains true circular geometry at any text length or aspect ratio.
 * **Fade In / Fade Out Sync**: Automatically inherits the parent text layer's `Transform > Opacity` and character animator opacity.
 * **Dedicated Effect Controls**: Adds `Padding X`, `Padding Y`, `Roundness`, `Box Opacity`, `Box Color`, `Box Lead`, `Box Smooth`, `Caret`, `Caret Width`, and `Caret Blink` controls directly to the box layer.
+* **Box and caret colour, and the reveal ease, are chosen in the dialog** before the box is built; the dialog reopens with whatever you used last.
+* **`Remove box`** takes the box, the measure layer, the LazyType animators and the Reveal controls back off the selected text layers in one click.
+* **The text's own colour is not part of the rig.** It belongs to your text layer: set it in the Character panel, or with this panel's Swatch, which colours text fill and stroke.
 
 ### 3. 🏹 Head to Line (Animated Arrows & Path Follower)
 * **1-Click Arrow & Pointer Generator**: Select any Pen-drawn line or Bezier path, choose a head style, and click **`🎯 Head it!`** to instantly attach an auto-orienting head.

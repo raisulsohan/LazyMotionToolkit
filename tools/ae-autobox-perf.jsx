@@ -43,23 +43,39 @@
             return t;
         }
 
+        // Collect every property on the box that carries an expression. Reading
+        // only one of them measures a fraction of the work: rendering a frame
+        // evaluates the lot, and the two Point Controls are where the real cost
+        // is, because each one measures the text.
+        function collect(group, bag) {
+            for (var i = 1; i <= group.numProperties; i++) {
+                var p;
+                try { p = group.property(i); } catch (eGet) { continue; }
+                if (p.propertyType !== PropertyType.PROPERTY) { collect(p, bag); continue; }
+                try { if (p.canSetExpression && p.expression !== "") bag.push(p); } catch (eP) {}
+            }
+            return bag;
+        }
+
         // Sweep 100 frames the way the timeline would, by asking the box layers
-        // for the value After Effects has to compute for each frame.
+        // for every value After Effects has to compute for each frame.
         function sweep(frames) {
             var probes = [];
+            var boxes = 0;
             for (var i = 1; i <= comp.numLayers; i++) {
                 var L = comp.layer(i);
                 if (L.name.indexOf(api.BOX_TAG) < 0 || L.name.indexOf(api.MEASURE_TAG) >= 0) continue;
-                probes.push(L.property("ADBE Root Vectors Group").property("Auto Box")
-                             .property("ADBE Vectors Group").property("ADBE Vector Shape - Rect")
-                             .property("ADBE Vector Rect Size"));
+                boxes++;
+                collect(L.property("ADBE Effect Parade"), probes);
+                collect(L.property("ADBE Root Vectors Group"), probes);
+                collect(L.property("ADBE Transform Group"), probes);
             }
             var t0 = new Date().getTime();
             for (var f = 0; f < frames; f++) {
                 var t = f / comp.frameRate;
                 for (var p = 0; p < probes.length; p++) probes[p].valueAtTime(t, false);
             }
-            return { ms: new Date().getTime() - t0, boxes: probes.length };
+            return { ms: new Date().getTime() - t0, boxes: boxes, props: probes.length };
         }
 
         var shortText = "Hello LazyType";
@@ -72,7 +88,7 @@
             api.autoBoxLayers(comp, made, {});
             var build = new Date().getTime() - t0;
             var r = sweep(100);
-            say(counts[c] + " box(es): built in " + build + " ms, 100-frame sweep " + r.ms +
+            say(counts[c] + " box(es), " + r.props + " live expressions: built in " + build + " ms, 100-frame sweep " + r.ms +
                 " ms (" + (r.ms / 100 / Math.max(1, r.boxes)).toFixed(2) + " ms per box per frame)");
         }
 
@@ -88,6 +104,32 @@
         var rb = sweep(100);
         say("1 box, " + para.length + " characters: built in " + buildBig + " ms, 100-frame sweep " +
             rb.ms + " ms (" + (rb.ms / 100).toFixed(2) + " ms per frame)");
+
+        // Before and after the one-measurement centre. The old Box Center ran the
+        // whole smoothing loop a second time; rebuilding that expression from the
+        // Box Rect one (they share a prelude) measures exactly what it cost.
+        while (comp.numLayers > 0) comp.layer(1).remove();
+        var ab = addText("AB", shortText, 60, 300);
+        api.autoBoxLayers(comp, [ab], {});
+        var abBox = null;
+        for (var bi = 1; bi <= comp.numLayers; bi++) {
+            var BL = comp.layer(bi);
+            if (BL.name.indexOf(api.BOX_TAG) >= 0 && BL.name.indexOf(api.MEASURE_TAG) < 0) abBox = BL;
+        }
+        if (abBox) {
+            var nowMs = sweep(100).ms;
+            var rectExpr = abBox.property("ADBE Effect Parade").property("Box Rect").property(1).expression;
+            var centreProp = abBox.property("ADBE Effect Parade").property("Box Center").property(1);
+            var oldCentre = rectExpr.replace("[r.width, r.height];", "[r.left + r.width / 2, r.top + r.height / 2];");
+            if (oldCentre === rectExpr) {
+                say("A/B: could not rebuild the old centre expression");
+            } else {
+                centreProp.expression = oldCentre;
+                var thenMs = sweep(100).ms;
+                say("centre measured twice (old): " + thenMs + " ms / 100 frames;  measured once (now): " +
+                    nowMs + " ms  ->  " + Math.round((1 - nowMs / thenMs) * 100) + "% less");
+            }
+        }
 
         // Box Smooth is the multiplier: every step is another sourceRectAtTime.
         var smooths = [0, 3, 10, 20];

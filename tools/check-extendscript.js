@@ -14,7 +14,17 @@ var scriptDir = fso.GetParentFolderName(WScript.ScriptFullName);
 var repoRoot = fso.GetParentFolderName(scriptDir);
 
 var targets = [
-  "LazyMotionToolkit.jsx"
+  "LazyMotionToolkit.jsx",
+  // The developer scripts are ExtendScript too. After Effects refuses a file
+  // with a reserved word in it without a word of explanation -- it simply does
+  // nothing -- so they are worth the same check as the panel.
+  "tools\\ae-smoke-test.jsx",
+  "tools\\ae-autobox-test.jsx",
+  "tools\\ae-autobox-perf.jsx",
+  "tools\\ae-autobox-unicode.jsx",
+  "tools\\ae-headline-test.jsx",
+  "tools\\ae-ui-test-audio.jsx",
+  "tools\\ae-ui-test-panel.jsx"
 ];
 
 function read(path) {
@@ -81,6 +91,14 @@ function lint(source) {
     "double enum export extends final float goto implements import int interface long native package private " +
     "protected public short static super synchronized throws transient volatile null true false").split(" ");
   var reserved = new RegExp("(\\.\\s*(" + words.join("|") + ")\\b)|([{,]\\s*(" + words.join("|") + ")\\s*:)");
+  /* A future reserved word as a plain variable or parameter name. JScript
+     accepts `var short = 1`, ExtendScript does not -- and After Effects reacts
+     by running nothing at all, with no error anywhere, which costs an hour to
+     work out. Only the words no host allows as a name are listed. */
+  var futureWords = ("abstract boolean byte char class const debugger double enum export extends final float goto " +
+    "implements import int interface long native package private protected public short static super " +
+    "synchronized throws transient volatile").split(" ");
+  var declared = new RegExp("\\b(var|function)\\s+(" + futureWords.join("|") + ")\\b");
   var out = [];
   var lines = source.split("\n");
   for (var n = 0; n < lines.length; n++) {
@@ -91,7 +109,12 @@ function lint(source) {
     if (/^\s*\*/.test(code)) continue; // inside a block comment
     var m = reserved.exec(code);
     if (m) out.push("line " + (n + 1) + ": reserved word used as a name: " + m[0].replace(/^\s+|\s+$/g, ""));
-    if (/\]\s*\.indexOf\(|(Paths|Files|parts|clean|list|array)\.indexOf\(/.test(code)) {
+    var d = declared.exec(code);
+    if (d) out.push("line " + (n + 1) + ": reserved word declared as a name: " + d[0]);
+    // An array literal's own .indexOf is the real mistake. `saved[i].indexOf(...)`
+    // just reads an element, which is usually a string, so it is left alone.
+    var literalIndexOf = /\]\s*\.indexOf\(/.test(code) && !/[\w\)]\s*\[[^\[\]]*\]\s*\.indexOf\(/.test(code);
+    if (literalIndexOf || /(^|[^\w.$\]])(Paths|Files|parts|clean|list|array)\s*\.indexOf\(/.test(code)) {
       out.push("line " + (n + 1) + ": Array indexOf is not available in ExtendScript");
     }
   }

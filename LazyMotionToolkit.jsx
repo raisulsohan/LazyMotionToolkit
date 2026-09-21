@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.8.22";
+    var _buildVersion     = "1.9.0";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -819,6 +819,19 @@
             "        l += r.left * k; tp += r.top * k; w += r.width * k; h += r.height * k; wt += k;",
             "    }",
             "    return { left: l / wt, top: tp / wt, width: w / wt, height: h / wt };",
+            "}",
+            // One frame, no averaging. sourceRectAtTime is by far the most
+            // expensive thing in this rig, so only the size is worth smoothing:
+            // the left and top edges barely move while the text types on, and
+            // the centre reads the already-smoothed size off the Box Rect
+            // control instead of measuring all over again.
+            "function boxEdge(){",
+            "    var lead = num(\"Box Lead\", 0);",
+            "    return SRC.sourceRectAtTime(time + lead * FD, false);",
+            "}",
+            "function smoothedSize(fallback){",
+            "    try { var v = effect(\"Box Rect\")(\"Point\"); if (v != null && (v[0] > 0 || v[1] > 0)) return v; } catch (e) {}",
+            "    return fallback;",
             "}"
         ].join("\n");
     }
@@ -838,7 +851,13 @@
     }
 
     function exprMeasuredCenter() {
-        return measurePrelude() + "\nif (T == null) { value; } else { var r = boxRect(); [r.left + r.width / 2, r.top + r.height / 2]; }";
+        return measurePrelude() + "\n" + [
+            "if (T == null) { value; } else {",
+            "    var r = boxEdge();",
+            "    var s = smoothedSize([r.width, r.height]);",
+            "    [r.left + s[0] / 2, r.top + s[1] / 2];",
+            "}"
+        ].join("\n");
     }
 
     function exprBoxSize() {
@@ -946,6 +965,17 @@
         return 0;
     }
 
+    /** True when `childName` really ended up parented to `parentName`. */
+    function layerHasParent(comp, childName, parentName) {
+        var ci = findLayerIdx(comp, childName);
+        var pi = findLayerIdx(comp, parentName);
+        if (!ci || !pi) return false;
+        try {
+            var p = comp.layer(ci).parent;
+            return p !== null && p.index === pi;
+        } catch (e) { return false; }
+    }
+
     function createMeasureLayer(comp, tempName, unit, origName) {
         var measName = origName + MEASURE_TAG;
         var srcIdx = findLayerIdx(comp, tempName);
@@ -973,6 +1003,12 @@
         var measIdx = findLayerIdx(comp, measName);
         if (parentIdx && measIdx) {
             try { comp.layer(measIdx).parent = comp.layer(parentIdx); } catch (e6) {}
+            // The measure layer only means anything through its parent; an
+            // orphan would silently make every box on it measure nothing.
+            if (!layerHasParent(comp, measName, tempName)) {
+                try { comp.layer(findLayerIdx(comp, measName)).remove(); } catch (eRm) {}
+                throw new Error("the measure layer could not be parented to the text layer");
+            }
             // Re-set position after parent to keep it at parent's origin
             measIdx = findLayerIdx(comp, measName);
             try {
@@ -1092,6 +1128,12 @@
         var txtIdx = findLayerIdx(comp, tempName);
         if (boxIdx && txtIdx) {
             try { comp.layer(boxIdx).parent = comp.layer(txtIdx); } catch (eP) {}
+            // Without the parent every expression on this layer measures nothing,
+            // so a box that got this far is not worth leaving behind quietly.
+            if (!layerHasParent(comp, boxName, tempName)) {
+                try { comp.layer(findLayerIdx(comp, boxName)).remove(); } catch (eRm) {}
+                throw new Error("the box could not be parented to the text layer");
+            }
             // Re-set transform AFTER parent so values are in parent space
             boxIdx = findLayerIdx(comp, boxName);
             try {
@@ -1203,7 +1245,15 @@
         var fontSize = 50;
         try { if (doc.fontSize > 0) fontSize = doc.fontSize; } catch (eFs) {}
         var band = (style.band !== undefined) ? style.band : o.band;
-        var opts = mergeOptions(o, { band: band });
+        // Every smoothing step is another sourceRectAtTime, and measuring a long
+        // paragraph is slow enough on its own. Past a few lines the box is big
+        // and slow-moving anyway, so the smoothing buys nothing worth the frame.
+        var chars = 0;
+        try { chars = String(doc.text).length; } catch (eLen) {}
+        var smooth = o.smooth;
+        if (chars > 400) smooth = 0;
+        else if (chars > 160) smooth = Math.min(smooth, 1);
+        var opts = mergeOptions(o, { band: band, smooth: smooth });
 
         removeAutoBoxRig(comp, tempName);
 
@@ -1288,6 +1338,50 @@
         return { made: made, skipped: skipped };
     }
 
+    /** Engine: take Auto Box back off every text layer in `layers`. */
+    function removeAutoBoxLayers(comp, layers) {
+        var cleared = [];
+        var skipped = [];
+        app.beginUndoGroup("LazyMotion: Remove Auto Box");
+        try {
+            // Names first: removing a rig shifts every index after it.
+            var names = [];
+            for (var i = 0; i < layers.length; i++) {
+                if (!(layers[i] instanceof TextLayer)) {
+                    skipped.push(layers[i].name + " (not a text layer)");
+                    continue;
+                }
+                names.push(layers[i].name);
+            }
+            for (var n = 0; n < names.length; n++) {
+                if (removeAutoBoxRig(comp, names[n])) cleared.push(names[n]);
+                else skipped.push(names[n] + " (no Auto Box on it)");
+            }
+        } finally {
+            app.endUndoGroup();
+        }
+        return { cleared: cleared, skipped: skipped };
+    }
+
+    function executeRemoveAutoBox() {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) {
+            alert("Please open a composition first.");
+            return;
+        }
+        var selected = comp.selectedLayers;
+        var anyText = false;
+        for (var s = 0; s < selected.length; s++) {
+            if (selected[s] instanceof TextLayer) anyText = true;
+        }
+        if (!anyText) {
+            alert("Select the text layer whose box you want to remove.");
+            return;
+        }
+        var result = removeAutoBoxLayers(comp, selected);
+        if (!result.cleared.length) alert("Nothing to remove:\n" + result.skipped.join("\n"));
+    }
+
     function executeAutoBoxMaker(options) {
         var comp = app.project.activeItem;
         if (!comp || !(comp instanceof CompItem)) {
@@ -1308,13 +1402,98 @@
     }
 
     // ---- Auto Box dialog ----
+    var AUTOBOX_EASES = ["Linear", "Ease out (types fast, settles)", "Smooth both ends"];
+    var AUTOBOX_SETTINGS_KEY = "AutoBoxOptions";
+
+    function aeColorToHex(c) {
+        var out = "#";
+        for (var i = 0; i < 3; i++) {
+            var v = Math.max(0, Math.min(255, Math.round((c[i] || 0) * 255))).toString(16);
+            if (v.length < 2) v = "0" + v;
+            out += v.toUpperCase();
+        }
+        return out;
+    }
+
+    /* Typing the same padding in every time is the kind of thing that makes a
+       panel tiring, so the dialog reopens where it was left. */
+    function autoBoxSaveOptions(o) {
+        try {
+            var parts = [];
+            for (var k in AUTOBOX_DEFAULTS) {
+                if (!AUTOBOX_DEFAULTS.hasOwnProperty(k) || o[k] === undefined) continue;
+                var v = o[k];
+                if (k === "boxColor" || k === "caretColor") v = aeColorToHex(v);
+                else if (v === true) v = 1;
+                else if (v === false) v = 0;
+                parts.push(k + "=" + v);
+            }
+            app.settings.saveSetting(_settingsSection, AUTOBOX_SETTINGS_KEY, parts.join(";"));
+        } catch (e) {}
+    }
+
+    function autoBoxLoadOptions() {
+        var o = mergeOptions(AUTOBOX_DEFAULTS, null);
+        try {
+            if (!app.settings.haveSetting(_settingsSection, AUTOBOX_SETTINGS_KEY)) return o;
+            var saved = app.settings.getSetting(_settingsSection, AUTOBOX_SETTINGS_KEY).split(";");
+            for (var i = 0; i < saved.length; i++) {
+                var pair = saved[i];
+                var cut = pair.indexOf("=");
+                if (cut < 1) continue;
+                var k = pair.substring(0, cut);
+                var v = pair.substring(cut + 1);
+                if (AUTOBOX_DEFAULTS[k] === undefined) continue;
+                if (k === "boxColor" || k === "caretColor") {
+                    var c = hexToAeColor(v);
+                    o[k] = [c[0], c[1], c[2]];
+                } else if (typeof AUTOBOX_DEFAULTS[k] === "boolean") {
+                    o[k] = (v === "1" || v === "true");
+                } else {
+                    var n = parseFloat(v);
+                    if (!isNaN(n)) o[k] = n;
+                }
+            }
+        } catch (e) {}
+        return o;
+    }
+
+    /** A label and a clickable colour chip that opens the system colour picker. */
+    function colorSwatchRow(parent, label, rgb, onPick) {
+        var g = parent.add("group");
+        g.orientation = "row";
+        g.alignChildren = ["left", "center"];
+        var l = g.add("statictext", undefined, label);
+        l.preferredSize.width = 104;
+        var chip = g.add("iconbutton", undefined, undefined);
+        chip.preferredSize = [48, 18];
+        var cur = [rgb[0], rgb[1], rgb[2]];
+        chip.onDraw = function () {
+            var gr = this.graphics;
+            var w = this.size[0], h = this.size[1];
+            var edge = gr.newBrush(gr.BrushType.SOLID_COLOR, [0.35, 0.36, 0.40, 1]);
+            gr.newPath(); gr.rectPath(0, 0, w, h); gr.fillPath(edge);
+            var fill = gr.newBrush(gr.BrushType.SOLID_COLOR, [cur[0], cur[1], cur[2], 1]);
+            gr.newPath(); gr.rectPath(1, 1, w - 2, h - 2); gr.fillPath(fill);
+        };
+        chip.onClick = function () {
+            var got = $.colorPicker(hexToDec(aeColorToHex(cur)));
+            if (got === -1) return;
+            var rgba = hexToAeColor(decToHex(got));
+            cur = [rgba[0], rgba[1], rgba[2]];
+            onPick(cur);
+            chip.notify("onDraw");
+        };
+        return chip;
+    }
+
     function showAutoBoxDialog() {
         var comp = app.project.activeItem;
         if (!comp || !(comp instanceof CompItem)) {
             alert("Please open a composition first.");
             return;
         }
-        var o = mergeOptions(AUTOBOX_DEFAULTS, null);
+        var o = autoBoxLoadOptions();
         var picked = { box: o.boxColor.slice(0), caret: o.caretColor.slice(0) };
 
         function styleLabels() {
@@ -1372,6 +1551,15 @@
         
         var edFramesUnit = numberRow(pReveal, 'Frames / unit:', o.framesPerUnit);
         var edTotalFrames = numberRow(pReveal, 'Total frames:', o.totalFrames);
+
+        var gEase = pReveal.add('group');
+        gEase.orientation = 'row';
+        gEase.alignChildren = ['left', 'center'];
+        var lEase = gEase.add('statictext', undefined, 'Ease:');
+        lEase.preferredSize.width = 104;
+        var ddEase = gEase.add('dropdownlist', undefined, AUTOBOX_EASES);
+        ddEase.selection = Math.max(0, Math.min(AUTOBOX_EASES.length - 1, o.ease));
+
         var chkPlayhead = pReveal.add('checkbox', undefined, 'Start at playhead');
         chkPlayhead.value = o.atPlayhead;
         
@@ -1384,8 +1572,10 @@
         var edPadY = numberRow(pBox, 'Padding Y:', o.padY);
         var edRound = numberRow(pBox, 'Roundness:', o.roundness);
         var edLead = numberRow(pBox, 'Box Lead:', o.lead);
-        var edSmooth = numberRow(pBox, 'Box Smooth:', o.smooth);
+        var edSmooth = numberRow(pBox, 'Box Smooth:', o.smooth,
+            'Frames averaged so the box slides instead of stepping. Every step costs another measurement, so long paragraphs turn it down on their own.');
         var edFade = numberRow(pBox, 'Box Fade:', o.fade);
+        colorSwatchRow(pBox, 'Box colour:', picked.box, function (c) { picked.box = c; });
         
         var pCaret = cols.add('panel', undefined, 'Caret and Stroke');
         pCaret.orientation = 'column';
@@ -1396,16 +1586,27 @@
         chkCaret.value = o.caret;
         var edCWidth = numberRow(pCaret, 'Caret Width:', o.caretWidth);
         var edCBlink = numberRow(pCaret, 'Caret Blink:', o.caretBlink);
-        
+        colorSwatchRow(pCaret, 'Caret colour:', picked.caret, function (c) { picked.caret = c; });
+
         var chkStroke = pCaret.add('checkbox', undefined, 'Add Stroke');
         chkStroke.value = o.stroke;
         var edSWidth = numberRow(pCaret, 'Stroke Width:', o.strokeWidth);
         
         var btnGrp = dlg.add('group');
-        btnGrp.alignment = ['right', 'bottom'];
+        btnGrp.alignment = ['fill', 'bottom'];
+        var btnRemove = btnGrp.add('button', undefined, 'Remove box');
+        btnRemove.helpTip = 'Take the box, the measure layer and the LazyType controls back off the selected text layers';
+        btnRemove.alignment = ['left', 'center'];
+        var spacer = btnGrp.add('group');
+        spacer.alignment = ['fill', 'center'];
         var btnCancel = btnGrp.add('button', undefined, 'Cancel');
         var btnApply = btnGrp.add('button', undefined, 'Apply');
-        
+
+        btnRemove.onClick = function() {
+            dlg.close();
+            executeRemoveAutoBox();
+        };
+
         btnApply.onClick = function() {
             var opts = {
                 style: ddStyle.selection ? ddStyle.selection.index : 0,
@@ -1415,7 +1616,7 @@
                 framesPerUnit: parseFloat(edFramesUnit.text) || o.framesPerUnit,
                 totalFrames: parseFloat(edTotalFrames.text) || o.totalFrames,
                 maxFrames: o.maxFrames,
-                ease: o.ease,
+                ease: ddEase.selection ? ddEase.selection.index : o.ease,
                 atPlayhead: chkPlayhead.value,
                 padX: parseFloat(edPadX.text) || 0,
                 padY: parseFloat(edPadY.text) || 0,
@@ -1428,9 +1629,10 @@
                 caretBlink: parseFloat(edCBlink.text) || o.caretBlink,
                 stroke: chkStroke.value,
                 strokeWidth: parseFloat(edSWidth.text) || o.strokeWidth,
-                boxColor: o.boxColor,
-                caretColor: o.caretColor
+                boxColor: picked.box,
+                caretColor: picked.caret
             };
+            autoBoxSaveOptions(opts);
             dlg.close();
             executeAutoBoxMaker(opts);
         };
@@ -1700,7 +1902,7 @@
 
         // Safe dynamic path tracker in expressions
         var posExprEnd =
-            "var line = thisLayer.parent;\n" +
+            "var line = null; try { line = thisLayer.parent; } catch (eNoParent) { line = null; }\n" +
             "if (line != null) {\n" +
             "    try {\n" +
             "        var targetPath = null;\n" +
@@ -1725,7 +1927,7 @@
             "} else { value; }";
 
         var rotExprEnd =
-            "var line = thisLayer.parent;\n" +
+            "var line = null; try { line = thisLayer.parent; } catch (eNoParent) { line = null; }\n" +
             "if (line != null) {\n" +
             "    try {\n" +
             "        var targetPath = null;\n" +
@@ -1754,7 +1956,7 @@
             "} else { value; }";
 
         var posExprStart =
-            "var line = thisLayer.parent;\n" +
+            "var line = null; try { line = thisLayer.parent; } catch (eNoParent) { line = null; }\n" +
             "if (line != null) {\n" +
             "    try {\n" +
             "        var targetPath = null;\n" +
@@ -1773,7 +1975,7 @@
             "} else { value; }";
 
         var rotExprStart =
-            "var line = thisLayer.parent;\n" +
+            "var line = null; try { line = thisLayer.parent; } catch (eNoParent) { line = null; }\n" +
             "if (line != null) {\n" +
             "    try {\n" +
             "        var targetPath = null;\n" +
@@ -1795,19 +1997,36 @@
             "    } catch(e) { value; }\n" +
             "} else { value; }";
 
-        try {
-            var trGroup = headLayer.property("ADBE Transform Group");
-            if (!isStartHead) {
-                trGroup.property("ADBE Position").expression = posExprEnd;
-                trGroup.property("ADBE Rotation").expression = rotExprEnd;
-            } else {
-                trGroup.property("ADBE Position").expression = posExprStart;
-                trGroup.property("ADBE Rotation").expression = rotExprStart;
-            }
+        var trGroup = headLayer.property("ADBE Transform Group");
 
+        /* A 2D layer's rotation is "ADBE Rotate Z"; "ADBE Rotation" returns
+           null, and reading `.expression` off null throws. That threw before
+           the rotation and the opacity were ever set, inside one big try that
+           swallowed it -- so the head sat on the end of the line without ever
+           turning to face along it, which is the entire point of the tool. */
+        function transformProp(names) {
+            for (var i = 0; i < names.length; i++) {
+                try {
+                    var p = trGroup.property(names[i]);
+                    if (p) return p;
+                } catch (e) {}
+            }
+            return null;
+        }
+        var rotProp = transformProp(["ADBE Rotate Z", "ADBE Rotation", "Rotation"]);
+        var posProp = transformProp(["ADBE Position"]);
+
+        try {
+            if (posProp) posProp.expression = isStartHead ? posExprStart : posExprEnd;
+        } catch (ePos) {}
+        try {
+            if (rotProp) rotProp.expression = isStartHead ? rotExprStart : rotExprEnd;
+        } catch (eRot) {}
+
+        try {
             // Opacity sync
             trGroup.property("ADBE Opacity").expression =
-                "var line = thisLayer.parent;\n" +
+                "var line = null; try { line = thisLayer.parent; } catch (eNoParent) { line = null; }\n" +
                 "if (line != null) {\n" +
                 "    var op = line.transform.opacity;\n" +
                 "    try {\n" +
@@ -1820,27 +2039,28 @@
         return headLayer;
     }
 
-    function executeHeadToLine(headType, roundCorners, doubleSided, reverseDir, doAnimate, animFrames) {
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
-            alert("Please open a composition first.");
-            return;
-        }
-
-        var selectedLayers = comp.selectedLayers;
-        if (selectedLayers.length === 0 || !(selectedLayers[0] instanceof ShapeLayer)) {
-            alert("Please select a Shape Layer with a Path first.");
-            return;
-        }
-
+    /**
+     * Engine: put a head on every shape layer in `layers`. Returns what it made
+     * and what it skipped, with the reason, the way the other tools here do.
+     * The panel's own entry point is the thin wrapper below.
+     */
+    function headToLineLayers(comp, layers, headType, roundCorners, doubleSided, reverseDir, doAnimate, animFrames) {
+        var made = [];
+        var skipped = [];
         app.beginUndoGroup("LazyMotion: Head to Line");
         try {
-            for (var i = 0; i < selectedLayers.length; i++) {
-                var lineLayer = selectedLayers[i];
-                if (!(lineLayer instanceof ShapeLayer)) continue;
+            for (var i = 0; i < layers.length; i++) {
+                var lineLayer = layers[i];
+                if (!(lineLayer instanceof ShapeLayer)) {
+                    skipped.push(lineLayer.name + " (not a shape layer)");
+                    continue;
+                }
 
                 var rootVec = lineLayer.property("ADBE Root Vectors Group");
-                if (!rootVec || rootVec.numProperties === 0) continue;
+                if (!rootVec || rootVec.numProperties === 0) {
+                    skipped.push(lineLayer.name + " (no path on it)");
+                    continue;
+                }
 
                 // Animate with Trim Paths if requested
                 if (doAnimate) {
@@ -1883,16 +2103,39 @@
                 }
 
                 // Create Head Layer(s)
+                var lineName = lineLayer.name;
                 createHeadShape(comp, lineLayer, headType, roundCorners, false, reverseDir);
+                made.push(lineName + " - Head");
                 if (doubleSided) {
                     createHeadShape(comp, lineLayer, headType, roundCorners, true, reverseDir);
+                    made.push(lineName + " - Head Start");
                 }
             }
         } catch (err) {
-            alert("Head to Line Error: " + err.toString());
+            skipped.push("stopped: " + err.toString());
         } finally {
             app.endUndoGroup();
         }
+        return { made: made, skipped: skipped };
+    }
+
+    function executeHeadToLine(headType, roundCorners, doubleSided, reverseDir, doAnimate, animFrames) {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) {
+            alert("Please open a composition first.");
+            return;
+        }
+        var selected = comp.selectedLayers;
+        var anyShape = false;
+        for (var s = 0; s < selected.length; s++) {
+            if (selected[s] instanceof ShapeLayer) anyShape = true;
+        }
+        if (!anyShape) {
+            alert("Please select a Shape Layer with a Path first.");
+            return;
+        }
+        var result = headToLineLayers(comp, selected, headType, roundCorners, doubleSided, reverseDir, doAnimate, animFrames);
+        if (result.skipped.length) alert("Head to Line skipped:\n" + result.skipped.join("\n"));
     }
 
     // ============================================================
@@ -3343,6 +3586,52 @@
             return colW;
         }
 
+        /*
+         * Retyping the same fade length or reselecting the same head shape every
+         * time After Effects restarts is the sort of small friction that makes a
+         * panel feel like work, so each field below remembers itself in the same
+         * place the swatches are kept.
+         */
+        function remember(key, ctrl, kind) {
+            var full = "UI_" + key;
+            try {
+                if (app.settings.haveSetting(_settingsSection, full)) {
+                    var v = app.settings.getSetting(_settingsSection, full);
+                    if (kind === "text") {
+                        ctrl.text = v;
+                    } else if (kind === "index") {
+                        var i = parseInt(v, 10);
+                        if (!isNaN(i) && i >= 0 && i < ctrl.items.length) ctrl.selection = i;
+                    } else {
+                        ctrl.value = (v === "1");
+                        try { ctrl.notify("onDraw"); } catch (eDraw) {}
+                    }
+                }
+            } catch (eLoad) {}
+
+            function save() {
+                try {
+                    var out;
+                    if (kind === "text") out = ctrl.text;
+                    else if (kind === "index") out = String(ctrl.selection ? ctrl.selection.index : 0);
+                    else out = ctrl.value ? "1" : "0";
+                    app.settings.saveSetting(_settingsSection, full, out);
+                } catch (eSave) {}
+            }
+
+            if (kind === "check") {
+                // createCheckbox already owns onClick; keep it and add the save.
+                var prev = ctrl.onClick;
+                ctrl.onClick = function () {
+                    if (prev) prev.call(this);
+                    save();
+                };
+            } else {
+                ctrl.onChange = save;
+            }
+            return ctrl;
+        }
+
         // ---- UI Drawing Helpers ----
 
         function fillRoundRect(g, brush, x, y, w, h, r) {
@@ -3723,22 +4012,24 @@
             "Pentagon", "Hexagon", "Heptagon", "Octagon"
         ]);
         dropHeadType.selection = 0;
+        remember("HeadType", dropHeadType, "index");
         dropHeadType.preferredSize = [86, 20];
 
         var hCheckRow1 = headCol.add("group");
         hCheckRow1.orientation = "row";
         hCheckRow1.spacing = 8;
-        var chkRoundCorners = createCheckbox(hCheckRow1, "Round", false, true);
-        var chkDoubleSided = createCheckbox(hCheckRow1, "Double", false, true);
+        var chkRoundCorners = remember("HeadRound", createCheckbox(hCheckRow1, "Round", false, true), "check");
+        var chkDoubleSided = remember("HeadDouble", createCheckbox(hCheckRow1, "Double", false, true), "check");
 
         var hCheckRow2 = headCol.add("group");
         hCheckRow2.orientation = "row";
         hCheckRow2.alignChildren = ["left", "center"];
         hCheckRow2.spacing = 4;
-        var chkReverseDir = createCheckbox(hCheckRow2, "Rev", false, true);
-        var chkAnimate = createCheckbox(hCheckRow2, "Anim:", true, false);
+        var chkReverseDir = remember("HeadReverse", createCheckbox(hCheckRow2, "Rev", false, true), "check");
+        var chkAnimate = remember("HeadAnimate", createCheckbox(hCheckRow2, "Anim:", true, false), "check");
         var inputAnimFrames = hCheckRow2.add("edittext", undefined, "30");
         inputAnimFrames.characters = 3;
+        remember("HeadFrames", inputAnimFrames, "text");
 
         var btnHeadIt = headCol.add("iconbutton", undefined, undefined);
         styleBtn(btnHeadIt, "⚙ Head it!", "default", 30);
@@ -3839,6 +4130,7 @@
         var inputFadeDur = fParamsRow.add("edittext", undefined, "20");
         inputFadeDur.characters = 3;
         inputFadeDur.helpTip = "Fade length in frames at speed 1";
+        remember("FadeDur", inputFadeDur, "text");
 
         var spdLbl = fParamsRow.add("statictext", undefined, "Spd:");
         spdLbl.graphics.font = ScriptUI.newFont("sans", "REGULAR", 9);
@@ -3846,6 +4138,7 @@
         var inputFadeSpd = fParamsRow.add("edittext", undefined, "1");
         inputFadeSpd.characters = 3;
         inputFadeSpd.helpTip = "Speed multiplier: 2 = twice as fast, 0.5 = twice as slow";
+        remember("FadeSpeed", inputFadeSpd, "text");
 
         var fEaseRow = fadeCol.add("group");
         fEaseRow.orientation = "row";
@@ -3859,14 +4152,15 @@
             "Ease InOut (Quad)", "Ease InOut (Cubic)", "Bounce", "Elastic"
         ]);
         dropEase.selection = 0;
+        remember("FadeEase", dropEase, "index");
         dropEase.preferredSize = [86, 20];
 
         var fOptsRow = fadeCol.add("group");
         fOptsRow.orientation = "row";
         fOptsRow.spacing = 4;
-        var chkFadeIn = createCheckbox(fOptsRow, "In", true);
-        var chkFadeOut = createCheckbox(fOptsRow, "Out", true);
-        var chkMarkers = createCheckbox(fOptsRow, "Markers", true);
+        var chkFadeIn = remember("FadeIn", createCheckbox(fOptsRow, "In", true), "check");
+        var chkFadeOut = remember("FadeOut", createCheckbox(fOptsRow, "Out", true), "check");
+        var chkMarkers = remember("FadeMarkers", createCheckbox(fOptsRow, "Markers", true), "check");
 
         var fActionsRow = fadeCol.add("group");
         fActionsRow.orientation = "row";
@@ -4141,6 +4435,15 @@
         $.global.LazyMotionToolkitTest.api = {
             version: _buildVersion,
             autoBoxLayers: autoBoxLayers,
+            removeAutoBoxLayers: removeAutoBoxLayers,
+            autoBoxLoadOptions: autoBoxLoadOptions,
+            autoBoxSaveOptions: autoBoxSaveOptions,
+            aeColorToHex: aeColorToHex,
+            layerHasParent: layerHasParent,
+            headToLineLayers: headToLineLayers,
+            executeHeadToLine: executeHeadToLine,
+            createHeadShape: createHeadShape,
+            getLineColorAndWidth: getLineColorAndWidth,
             createAutoBox: createAutoBox,
             removeAutoBoxRig: removeAutoBoxRig,
             findLayerIdx: findLayerIdx,

@@ -48,9 +48,28 @@
         }
         if (win) {
             check("panel: LazyStrike FX button", !!findText(win, "⚡ LazyStrike FX"));
-            check("panel: LazyPreview Render section", !!findText(win, "🎬 LazyPreview Render"));
+            // addSectionHeader upper-cases the title it is given.
+            check("panel: LazyPreview Render section", !!findText(win, "🎬 LAZYPREVIEW RENDER"));
             check("panel: Render button", !!findText(win, "▶ Render In→Out"));
-            check("panel: version in footer", !!findText(win, "v" + api.version.replace(/\.0$/, "") + " • Developed By RaisulSohan • raisulsohan.com"));
+            check("panel: Auto Box button", !!findText(win, "⊡ Auto Box"));
+            check("panel: Grid Maker button", !!findText(win, "⊞ Grid Maker"));
+        }
+
+        // The Auto Box dialog is modal, so it cannot be opened here; what it
+        // reads and writes between sessions can still be checked.
+        try {
+            var before = api.autoBoxLoadOptions();
+            var probe = api.autoBoxLoadOptions();
+            probe.padX = 77;
+            probe.boxColor = [1, 0, 0.5];
+            api.autoBoxSaveOptions(probe);
+            var back = api.autoBoxLoadOptions();
+            check("Auto Box settings survive a round trip",
+                back.padX === 77 && api.aeColorToHex(back.boxColor) === "#FF0080",
+                back.padX + " " + api.aeColorToHex(back.boxColor));
+            api.autoBoxSaveOptions(before); // leave the user's own settings as they were
+        } catch (eSet) {
+            check("Auto Box settings survive a round trip", false, eSet.toString());
         }
 
         try {

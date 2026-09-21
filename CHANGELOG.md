@@ -2,6 +2,29 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.9.0
+
+### 🐛 Bug Fixes
+- **Head to Line: the head never turned.** A 2D layer's rotation is `ADBE Rotate Z`; the code asked for `ADBE Rotation`, which comes back as null. Setting an expression on null threw, inside one try that wrapped the rotation *and* the opacity, and the throw was swallowed. So the head landed on the end of the line and then just sat there pointing right, whatever the line did -- and its opacity never followed the line either. Both work now, and each expression is applied on its own so one failure cannot take the others with it.
+- **Head to Line: the head survives losing its line.** Same landmine as the box: a bare `thisLayer.parent` read in five expressions, which After Effects disables for good the first time it throws.
+- **Auto Box says when it could not build.** A box or measure layer that failed to parent was left in place, silently measuring nothing. It is now removed and reported in the skipped list, like every other refusal.
+
+### ⚡ Performance
+- **Auto Box costs about a third less per frame.** `Box Rect` and `Box Center` each ran the whole smoothing loop, so the text was measured twice over -- eight `sourceRectAtTime` calls a frame at the defaults. Only the size is worth smoothing: the left and top edges barely move while text types on, so the centre now measures once and reads the smoothed size off `Box Rect`. Measured on the same box in After Effects 2026: 939 ms to 657 ms over 100 frames, 30% less.
+- **Long paragraphs turn their own smoothing down.** Past about 160 characters Box Smooth drops to 1, past 400 to 0. A 600-character paragraph now evaluates in 10.8 ms a frame instead of being the slowest thing in the comp; a big block of text moves slowly enough that the smoothing was buying nothing anyway. The slider is still yours to raise.
+
+### ✨ What is new
+- **Box and caret colours in the dialog.** They were only ever reachable as effect controls on the finished layer -- the dialog had the variable for them and never showed a picker. Now you choose before you apply.
+- **Reveal ease in the dialog.** Three modes existed in the code and none of them had a control; every box ever made used the middle one.
+- **Remove box.** There was no way back except undo, and deleting the box by hand left the measure layer, the LazyType animators and the Reveal controls on the text. The dialog has a Remove box button now.
+- **The panel remembers what you set.** The Auto Box dialog reopens where you left it, and the fade length, speed, easing, head shape and the rest come back after a restart.
+
+### 🧪 Testing
+- **`tools/ae-autobox-test.jsx` now has company: `tools/ae-headline-test.jsx`.** Head to Line had no test at all, which is how a head that never rotated shipped. 67 checks in a headless After Effects: the head on the end of a straight line, a line that turns, both ends, Trim Paths, all eight shapes, an orphaned head and a layer that is not a shape.
+- **Head to Line has an engine.** It was the only tool here that did its work inside the panel's click handler, reading `comp.selectedLayers` directly, so nothing could drive it but a human. It is now `headToLineLayers(comp, layers, ...)` with a thin wrapper, like everything else.
+- **The syntax checker covers the developer scripts too, and catches a reserved word used as a name.** `var short = ...` passes JScript and makes After Effects run nothing at all, in silence. That cost an hour here; it is one line of lint now.
+- **`tools/ae-autobox-perf.jsx` and `tools/ae-autobox-unicode.jsx`.** One times the rig, the other types Bengali on and checks the box never jumps -- `substr` cuts UTF-16 code units and a cluster like ksha is three of them. It holds up.
+
 ## 1.8.22
 
 ### 🐛 Bug Fixes

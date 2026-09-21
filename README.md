@@ -20,7 +20,15 @@
   <a href="#-author--credits">Credits</a>
 </p>
 
-Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.10** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.11** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+
+---
+
+## 🆕 What's New in 1.11
+
+- **Head to Line drew the wrong shape, and now does not.** Every "Triangle" was really a three-pointed star turned inside out. After Effects numbers a polystar's Type the other way round from what the code assumed, spells its roundness match names `Roundess` with one n, and puts `Shape Direction` at property 1 so every numeric fallback was off by one -- which is how ticking `Round` ended up writing 15 into the inner radius.
+- **A second click changes the head instead of stacking one behind it.** Pick Triangle, change your mind, pick Circle: you get a circle. The Head Size and Offset Angle you had set come back with the new shape, and a head you renamed is still recognised.
+- **Stagger can move keyframes instead of layers.** `Keys only` leaves the layer bars alone and steps the animation apart -- for layers that run the whole comp. Easing, hold keys, spatial tangents and roving keys all survive the move.
 
 ---
 
@@ -117,6 +125,7 @@ Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-sm
 ### 3. 🏹 Head to Line (Animated Arrows & Path Follower)
 * **1-Click Arrow & Pointer Generator**: Select any Pen-drawn line or Bezier path, choose a head style, and click **`🎯 Head it!`** to instantly attach an auto-orienting head.
 * **8 Head Styles**: `Triangle`, `Circle`, `Star`, `Rectangle`, `Pentagon`, `Hexagon`, `Heptagon`, and `Octagon`.
+* **Changing your mind is one click**: clicking `Head it!` again with a different style replaces the head instead of adding a second one, keeping the Head Size and Offset Angle you had set. A head you renamed is still recognised.
 * **Smart Tangent Tracking**: Head automatically rotates (`tangentOnPath`) and follows every curve and bend without manual keyframing.
 * **Round Corners & Double-Sided**: Optional rounded corner smoothing and double-sided heads (heads at both Start and End).
 * **Trim Paths Animation Sync**: Check `Animate (f)` with custom duration in frames to automatically generate smooth, easy-eased path drawing with the head riding the animated tip.
@@ -142,6 +151,7 @@ Every change below was checked inside After Effects 2026 (26.5) by [`tools/ae-sm
 
 ### 6. ⇥ Stagger & ◎ Null + Parent
 * **`[ ⇥ Stagger ]`**: steps the selected layers apart in time, top to bottom, by the number of frames in the box. Each layer keeps its own start, so only the spacing is added: run it on a stack that already has timing and the timing survives. `Rev` starts from the bottom layer instead, and a negative number closes the spread back up. Layers are ordered by where they sit in the timeline, not by the order you clicked them. Locked layers are skipped with a note.
+  * **`Keys only`** moves the keyframes and leaves the layer bars where they are — for layers that run the whole comp and only their animation should cascade. Easing, hold keys, spatial tangents and roving keys come through intact, and a layer with no keyframes is reported rather than silently ignored. Left off, the whole layer moves and its keyframes go with it, because a keyframe's time is stored against its layer's start.
 * **`[ ◎ Null + Parent ]`**: one null on top, centred on the selection, with everything selected parented to it. A layer whose own parent is also selected keeps that parent — it already follows the null through it, and re-parenting would flatten the rig you built. The null turns 3D if anything in the selection is, its anchor sits in its middle so it rotates and scales around itself, and nothing on screen moves.
 
 ### 7. ⊞ Grid Designer Dialog

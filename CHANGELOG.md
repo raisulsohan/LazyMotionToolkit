@@ -2,6 +2,24 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.11.0
+
+### 🐛 Bug Fixes
+- **Head to Line drew the wrong shape.** Every "Triangle" was a three-pointed star turned inside out, and the polygons were stars too. Three separate mistakes, all in the same few lines, found by asking After Effects what it actually calls things:
+  - **Type 1 is a Star and Type 2 is a Polygon**, not the other way round. A fresh polystar comes back as Type 1 with five points and an inner radius -- that is a star.
+  - **After Effects spells the roundness match names `Roundess`**, with one n. Looking them up by the sensible spelling returned null every time.
+  - **Every numeric fallback was off by one**: property 1 of a polystar is `Shape Direction`, not `Type`. So the null roundness lookup fell through to property 6, which is `Inner Radius`, and a tick in the Round box quietly set the inner radius to 15. With the outer radius driven down to about 17 while the inner one sat at its default 50, the head folded in on itself -- the pinched shape in the bug report.
+  The numeric fallbacks are gone. A property that cannot be found by match name is now skipped rather than silently writing to whichever property happens to sit at that index.
+
+### ✨ What is new
+- **A second click changes the head instead of stacking another one behind it.** Pick Triangle, change your mind, pick Circle: you get a circle, not a circle on top of a triangle. The Head Size and Offset Angle you had dialled in come back with the new shape, and a head you renamed is still recognised -- heads are found by carrying a Head Size control, not by their name.
+- **Stagger can move keyframes instead of layers.** `Keys only` leaves every layer bar where it is and steps the animation apart instead, which is what you want when the layers run the whole comp. Easing, hold keys, spatial tangents and roving keys all survive the move. Left off, the whole layer moves and its keyframes ride along with it, because a keyframe's time is stored against its layer's start.
+
+### 🧪 Testing
+- **`tools/ae-headline-render.jsx`.** The old test checked the head had *some* width and height, which a star passes as happily as a triangle -- which is exactly how this shipped. The new one renders every head on a real line to a PNG so the shapes can be looked at.
+- The head test now reads the polystar back: Type, point count, and that Round reached the roundness rather than the radius. It also covers the swap, the kept size and angle, and a renamed head.
+- Recorded, not worked around: switching Type to Polygon makes After Effects delete any expression on `Inner Radius`, reset it to 50 and lock it, and switching back to Star does not restore it. A polygon ignores the value, and the test asserts the lock so a future release changing this is noticed.
+
 ## 1.10.0
 
 ### ✨ What is new

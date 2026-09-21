@@ -53,6 +53,18 @@
         return bag;
     }
 
+    var EXPECTED_POINTS = {
+        Triangle: 3, Star: 5, Pentagon: 5, Hexagon: 6, Heptagon: 7, Octagon: 8
+    };
+
+    /** The polystar inside a head layer, or null when it was drawn another way. */
+    function polystarOf(head) {
+        try {
+            return head.property("ADBE Root Vectors Group").property("Head Shape")
+                       .property("ADBE Vectors Group").property("ADBE Vector Shape - Star") || null;
+        } catch (e) { return null; }
+    }
+
     var lastRes = null;
     function reportRes(r) { lastRes = r; return r; }
     function why() { return (lastRes && lastRes.skipped.length) ? lastRes.skipped.join(" | ") : "engine reported nothing"; }
@@ -229,13 +241,108 @@
                     check(types[i] + ": no expression rejected", bad.length === 0, bad.join(" | "));
                     var pos = head.property("ADBE Transform Group").property("ADBE Position").valueAtTime(t, false);
                     check(types[i] + ": head on the end of the path", near(pos[0], 400, 3), pos.join(","));
-                    // A head that drew nothing would have no size at all.
+                    // A head that drew nothing would have no size at all. This
+                    // was the only geometry check there used to be, and it
+                    // passed happily while every "Triangle" was a three-pointed
+                    // star turned inside out.
                     var r = head.sourceRectAtTime(t, false);
                     check(types[i] + ": the shape actually drew something", r.width > 2 && r.height > 2,
                         Math.round(r.width) + "x" + Math.round(r.height));
+
+                    var poly = polystarOf(head);
+                    var wantPolygon = (types[i] !== "Star" && types[i] !== "Circle" && types[i] !== "Rectangle");
+                    if (types[i] === "Circle" || types[i] === "Rectangle") {
+                        check(types[i] + ": not built from a polystar", poly === null);
+                    } else if (poly) {
+                        // Type 1 is Star, 2 is Polygon. The names read the other
+                        // way round in the old code, which is the whole bug.
+                        var typ = poly.property("ADBE Vector Star Type").value;
+                        check(types[i] + ": polystar Type is " + (wantPolygon ? "Polygon (2)" : "Star (1)"),
+                            typ === (wantPolygon ? 2 : 1), "got " + typ);
+
+                        var pts = poly.property("ADBE Vector Star Points").value;
+                        check(types[i] + ": point count", pts === EXPECTED_POINTS[types[i]],
+                            pts + " vs " + EXPECTED_POINTS[types[i]]);
+
+                        var innerProp = poly.property("ADBE Vector Star Inner Radius");
+                        var inner = innerProp.valueAtTime(t, false);
+                        var outer = poly.property("ADBE Vector Star Outer Radius").valueAtTime(t, false);
+                        if (wantPolygon) {
+                            // Switching Type to Polygon makes After Effects wipe
+                            // any expression on Inner Radius, reset it to 50 and
+                            // lock it. The value is ignored while it is a
+                            // polygon, so this records the behaviour rather than
+                            // pretending we can do something about it. If a
+                            // future release unlocks it, this fails and says so.
+                            check(types[i] + ": After Effects has taken the inner radius out of play",
+                                innerProp.canSetExpression === false, "canSetExpression=" + innerProp.canSetExpression);
+                        } else {
+                            // Inner larger than outer is what turns a star
+                            // inside out into the pinched shape that started
+                            // all this.
+                            check(types[i] + ": inner radius stays inside the outer one", inner < outer,
+                                inner + " vs " + outer);
+                        }
+
+                        // Round was ticked above. "Outer Roundness" is spelled
+                        // "Roundess" in the match name; looking it up by the
+                        // sensible spelling returned null and the old code fell
+                        // through to property 6, which is Inner Radius.
+                        var roundess = poly.property("ADBE Vector Star Outer Roundess");
+                        check(types[i] + ": Round reached the roundness, not the radius",
+                            !!roundess && roundess.value > 0 && inner !== 15,
+                            (roundess ? roundess.value : "null") + ", inner " + inner);
+                    } else {
+                        check(types[i] + ": polystar found", false, "none");
+                    }
                 }
                 L.remove();
             }
+        });
+
+        section("a second click changes the head instead of stacking one on", function () {
+            var L = makeLine("Swap", [[0, 0], [400, 0]]);
+            reportRes(api.headToLineLayers(comp, [L], "Triangle", false, false, false, false, 30));
+            var first = layerByName(comp, "Swap - Head");
+            check("first head made", !!first, first ? "" : why());
+            if (!first) { L.remove(); return; }
+            first.property("ADBE Effect Parade").property("Head Size").property(1).setValue(60);
+            first.property("ADBE Effect Parade").property("Offset Angle").property(1).setValue(25);
+            var before = comp.numLayers;
+
+            var line = layerByName(comp, "Swap");
+            var res = api.headToLineLayers(comp, [line], "Circle", false, false, false, false, 30);
+            check("second click reported a replacement", res.replaced.length === 1, res.replaced.join(","));
+            check("layer count did not grow", comp.numLayers === before, before + " -> " + comp.numLayers);
+
+            var heads = 0;
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === "Swap - Head") heads++;
+            }
+            check("still exactly one head", heads === 1, heads);
+
+            var now = layerByName(comp, "Swap - Head");
+            check("it is a circle now", !!now && polystarOf(now) === null &&
+                !!now.property("ADBE Root Vectors Group").property("Head Shape")
+                     .property("ADBE Vectors Group").property("ADBE Vector Shape - Ellipse"));
+            check("the size you had dialled in came back",
+                near(now.property("ADBE Effect Parade").property("Head Size").property(1).value, 60, 0.01),
+                now.property("ADBE Effect Parade").property("Head Size").property(1).value);
+            check("the offset angle came back",
+                near(now.property("ADBE Effect Parade").property("Offset Angle").property(1).value, 25, 0.01),
+                now.property("ADBE Effect Parade").property("Offset Angle").property(1).value);
+
+            // A head the user renamed is still recognised as ours.
+            now.name = "my arrow";
+            var line2 = layerByName(comp, "Swap");
+            var res2 = api.headToLineLayers(comp, [line2], "Rectangle", false, false, false, false, 30);
+            check("a renamed head is still replaced, not stacked", res2.replaced.length === 1 &&
+                layerByName(comp, "my arrow") === null, res2.replaced.join(",") + " / " + comp.numLayers);
+
+            var lineEnd = layerByName(comp, "Swap");
+            if (lineEnd) lineEnd.remove();
+            var leftover = layerByName(comp, "Swap - Head");
+            if (leftover) leftover.remove();
         });
 
         section("deleting the line does not poison the head", function () {

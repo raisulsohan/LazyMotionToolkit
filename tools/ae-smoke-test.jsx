@@ -273,11 +273,71 @@
             for (var r = 0; r < made.length; r++) rev.push(Math.round((made[r].startTime - 1) / fd));
             check("stagger: reverse starts from the bottom layer", rev.join(",") === "0,5,10,15", rev.join(","));
 
-            made[0].locked = true;
+            made[1].locked = true;
             var res3 = api.staggerLayers(comp, made, 5, false);
             check("stagger: a locked layer is skipped with a reason", res3.skipped.length === 1, res3.skipped.join(" | "));
-            made[0].locked = false;
+            made[1].locked = false;
             for (var d = 0; d < made.length; d++) made[d].remove();
+        });
+
+        section("stagger: layers vs keyframes", function () {
+            function keyed(name) {
+                var L = comp.layers.addSolid([0.4, 0.2, 0.6], name, 100, 100, 1, 10);
+                var op = L.property("ADBE Transform Group").property("ADBE Opacity");
+                op.setValueAtTime(1, 0);
+                op.setValueAtTime(2, 100);
+                op.setTemporalEaseAtKey(2, [new KeyframeEase(0, 66)], [new KeyframeEase(0, 66)]);
+                return L;
+            }
+            var fd = 1 / comp.frameRate;
+
+            // Layer mode: the bar moves and the keys ride along with it, because
+            // a keyframe's time is stored against the layer's own start.
+            var a1 = keyed("K1"), a2 = keyed("K2");
+            api.staggerLayers(comp, [a1, a2], 10, false);
+            var top = (a1.index < a2.index) ? a1 : a2;
+            var low = (a1.index < a2.index) ? a2 : a1;
+            check("stagger layer mode: the lower layer's bar moved 10 frames",
+                Math.round((low.startTime) / fd) === 10, Math.round(low.startTime / fd));
+            check("stagger layer mode: its keyframes went with it",
+                Math.round(low.property("ADBE Transform Group").property("ADBE Opacity").keyTime(1) / fd) === 35,
+                Math.round(low.property("ADBE Transform Group").property("ADBE Opacity").keyTime(1) / fd));
+            check("stagger layer mode: the top layer did not move",
+                top.startTime === 0 &&
+                Math.round(top.property("ADBE Transform Group").property("ADBE Opacity").keyTime(1) / fd) === 25);
+            a1.remove(); a2.remove();
+
+            // Keys-only mode: the bars stay put and only the animation cascades.
+            var b1 = keyed("K3"), b2 = keyed("K4");
+            var res = api.staggerLayers(comp, [b1, b2], 10, false, true);
+            check("stagger keys mode: nothing skipped", res.skipped.length === 0, res.skipped.join(" | "));
+            var topB = (b1.index < b2.index) ? b1 : b2;
+            var lowB = (b1.index < b2.index) ? b2 : b1;
+            var lowOp = lowB.property("ADBE Transform Group").property("ADBE Opacity");
+            check("stagger keys mode: the bar stayed where it was", lowB.startTime === 0, lowB.startTime);
+            check("stagger keys mode: both keys moved 10 frames",
+                Math.round(lowOp.keyTime(1) / fd) === 35 && Math.round(lowOp.keyTime(2) / fd) === 60,
+                Math.round(lowOp.keyTime(1) / fd) + "," + Math.round(lowOp.keyTime(2) / fd));
+            check("stagger keys mode: the values came through",
+                lowOp.keyValue(1) === 0 && lowOp.keyValue(2) === 100,
+                lowOp.keyValue(1) + "," + lowOp.keyValue(2));
+            check("stagger keys mode: the easing survived the move",
+                Math.round(lowOp.keyInTemporalEase(2)[0].influence) === 66,
+                lowOp.keyInTemporalEase(2)[0].influence);
+            check("stagger keys mode: the top layer was left alone",
+                Math.round(topB.property("ADBE Transform Group").property("ADBE Opacity").keyTime(1) / fd) === 25);
+
+            // And a layer with no keyframes at all says so rather than pretending.
+            // It has to sit below another layer: the topmost one sets the beat
+            // and is never moved, so it would never be reported either way.
+            var plain = comp.layers.addSolid([0.2, 0.2, 0.2], "NoKeys", 100, 100, 1, 10);
+            var onTop = keyed("K5");
+            check("stagger keys mode: the keyless layer really is the lower one",
+                onTop.index < plain.index, onTop.index + " / " + plain.index);
+            var res2 = api.staggerLayers(comp, [onTop, plain], 10, false, true);
+            check("stagger keys mode: a layer without keyframes is reported",
+                res2.skipped.length === 1, res2.skipped.join(" | "));
+            onTop.remove(); plain.remove(); b1.remove(); b2.remove();
         });
 
         section("null + parent", function () {

@@ -18,7 +18,7 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.10.0";
+    var _buildVersion     = "1.11.0";
     var _settingsSection  = "LazyMotionToolkit_Data";
 
     // ============================================================
@@ -1819,7 +1819,40 @@
         return { color: color, width: width };
     }
 
-    function createHeadShape(comp, lineLayer, headTypeStr, roundCorners, isStartHead, reverseDir) {
+    /**
+     * Everything Head to Line has already put on this line, taken back off, so
+     * picking a different shape changes the head instead of stacking a second
+     * one behind the first. Heads are found by what they are rather than by
+     * their name -- a child of this line carrying a Head Size control -- so a
+     * head you renamed is still recognised. The size and the offset angle you
+     * had dialled in come back with the new shape.
+     */
+    function removeExistingHeads(comp, lineName) {
+        var kept = { size: null, angle: null, removed: 0 };
+        var lineIdx = findLayerIdx(comp, lineName);
+        if (!lineIdx) return kept;
+        for (var i = comp.numLayers; i >= 1; i--) {
+            var L;
+            try { L = comp.layer(i); } catch (eGet) { continue; }
+            var p = null;
+            try { p = L.parent; } catch (eP) {}
+            if (!p || p.index !== lineIdx) continue;
+            var sizeFx = findEffectByName(L, "Head Size");
+            if (!sizeFx) continue;
+            try { if (kept.size === null) kept.size = sizeFx.property(1).value; } catch (eS) {}
+            try {
+                var angleFx = findEffectByName(L, "Offset Angle");
+                if (angleFx && kept.angle === null) kept.angle = angleFx.property(1).value;
+            } catch (eA) {}
+            try { L.remove(); kept.removed++; } catch (eR) {}
+            // Removing a layer shifts every index below it.
+            lineIdx = findLayerIdx(comp, lineName);
+            if (!lineIdx) break;
+        }
+        return kept;
+    }
+
+    function createHeadShape(comp, lineLayer, headTypeStr, roundCorners, isStartHead, reverseDir, kept) {
         if (!lineLayer) return null;
 
         var headLayer = comp.layers.addShape();
@@ -1829,69 +1862,104 @@
 
         var lineInfo = getLineColorAndWidth(lineLayer);
         var headSize = Math.max(16, lineInfo.width * 3.5);
+        if (kept && kept.size !== null && kept.size > 0) headSize = kept.size;
 
         addSliderControl(headLayer, "Head Size", headSize);
-        addSliderControl(headLayer, "Offset Angle", 0);
+        addSliderControl(headLayer, "Offset Angle", (kept && kept.angle !== null) ? kept.angle : 0);
 
         var rootVec = headLayer.property("ADBE Root Vectors Group");
         var shapeGrp = rootVec.addProperty("ADBE Vector Group");
         shapeGrp.name = "Head Shape";
         var grpContents = shapeGrp.property("ADBE Vectors Group");
 
+        /*
+         * Look a shape property up by match name and nothing else.
+         *
+         * This used to fall back to a property number when the name missed, and
+         * every one of those numbers was wrong: property 1 of a polystar is
+         * Shape Direction, not Type, so the whole list is off by one. The
+         * roundness names missed every time -- After Effects spells them
+         * "Roundess", with one n -- so "Outer Roundness" fell through to
+         * property 6, which is Inner Radius. A tick in the Round box quietly set
+         * the inner radius to 15 instead.
+         */
+        function shapeProp(group, names) {
+            for (var i = 0; i < names.length; i++) {
+                try {
+                    var p = group.property(names[i]);
+                    if (p) return p;
+                } catch (e) {}
+            }
+            return null;
+        }
+        function setProp(group, names, value) {
+            var p = shapeProp(group, names);
+            if (p) { try { p.setValue(value); } catch (e) {} }
+            return p;
+        }
+        function setExpr(group, names, expr) {
+            var p = shapeProp(group, names);
+            if (p) { try { p.expression = expr; } catch (e) {} }
+            return p;
+        }
+
+        // Type 1 is a Star and Type 2 is a Polygon -- a fresh polystar comes back
+        // as Type 1 with five points and an inner radius, which is a star. The
+        // code had these the other way round, so every "Triangle" was really a
+        // three-pointed star, and with the outer radius driven down to about 17
+        // while the inner one stayed at its default 50 it turned inside out.
+        var POLYSTAR = { star: 1, polygon: 2 };
+        var SIZE_EXPR = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];";
+        var OUTER_EXPR = "effect(\"Head Size\")(\"Slider\") * 0.5;";
+
         // Shape Geometry based on Type
         switch (headTypeStr) {
             case "Circle":
                 var circ = grpContents.addProperty("ADBE Vector Shape - Ellipse");
-                try { (circ.property("ADBE Vector Ellipse Size") || circ.property(2)).expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];"; } catch(eC) {}
+                setExpr(circ, ["ADBE Vector Ellipse Size"], SIZE_EXPR);
                 break;
 
             case "Rectangle":
                 var rect = grpContents.addProperty("ADBE Vector Shape - Rect");
-                try { (rect.property("ADBE Vector Rect Size") || rect.property(2)).expression = "var s = effect(\"Head Size\")(\"Slider\"); [s, s];"; } catch(eR1) {}
-                if (roundCorners) {
-                    try { (rect.property("ADBE Vector Rect Roundness") || rect.property(3)).setValue(8); } catch(eR2) {}
-                }
+                setExpr(rect, ["ADBE Vector Rect Size"], SIZE_EXPR);
+                if (roundCorners) setProp(rect, ["ADBE Vector Rect Roundness"], 8);
                 break;
 
             case "Star":
                 var star = grpContents.addProperty("ADBE Vector Shape - Star");
-                // 1. Type: 2 = Star
-                try { (star.property("ADBE Vector Star Type") || star.property(1)).setValue(2); } catch(eS1) {}
-                // 2. Points: 5
-                try { (star.property("ADBE Vector Star Points") || star.property(2)).setValue(5); } catch(eS2) {}
-                // 3. Rotation: 90
-                try { (star.property("ADBE Vector Star Rotation") || star.property(4)).setValue(90); } catch(eS3) {}
-                // 4. Inner Radius: Property 5
-                try { (star.property("ADBE Vector Star Inner Radius") || star.property(5)).expression = "effect(\"Head Size\")(\"Slider\") * 0.22;"; } catch(eS4) {}
-                // 5. Outer Radius: Property 7
-                try { (star.property("ADBE Vector Star Outer Radius") || star.property(7)).expression = "effect(\"Head Size\")(\"Slider\") * 0.5;"; } catch(eS5) {}
+                setProp(star, ["ADBE Vector Star Type"], POLYSTAR.star);
+                setProp(star, ["ADBE Vector Star Points"], 5);
+                setProp(star, ["ADBE Vector Star Rotation"], 90);
+                setExpr(star, ["ADBE Vector Star Inner Radius"], "effect(\"Head Size\")(\"Slider\") * 0.22;");
+                setExpr(star, ["ADBE Vector Star Outer Radius"], OUTER_EXPR);
                 if (roundCorners) {
-                    try {
-                        (star.property("ADBE Vector Star Inner Roundness") || star.property(6)).setValue(10);
-                        (star.property("ADBE Vector Star Outer Roundness") || star.property(8)).setValue(10);
-                    } catch(eS6) {}
+                    setProp(star, ["ADBE Vector Star Inner Roundess", "ADBE Vector Star Inner Roundness"], 10);
+                    setProp(star, ["ADBE Vector Star Outer Roundess", "ADBE Vector Star Outer Roundness"], 10);
                 }
                 break;
 
             case "Triangle":
             default:
                 var poly = grpContents.addProperty("ADBE Vector Shape - Star");
-                // 1. Type: 1 = Polygon
-                try { (poly.property("ADBE Vector Star Type") || poly.property(1)).setValue(1); } catch(eP1) {}
                 var numPts = 3;
                 if (headTypeStr === "Pentagon") numPts = 5;
                 else if (headTypeStr === "Hexagon") numPts = 6;
                 else if (headTypeStr === "Heptagon") numPts = 7;
                 else if (headTypeStr === "Octagon") numPts = 8;
 
-                // 2. Points
-                try { (poly.property("ADBE Vector Star Points") || poly.property(2)).setValue(numPts); } catch(eP2) {}
-                // 3. Rotation
-                try { (poly.property("ADBE Vector Star Rotation") || poly.property(4)).setValue(90); } catch(eP3) {}
-                // 4. Outer Radius (Property 5 for Polygons)
-                try { (poly.property("ADBE Vector Star Outer Radius") || poly.property(5)).expression = "effect(\"Head Size\")(\"Slider\") * 0.5;"; } catch(eP4) {}
+                /* No inner radius here, and nothing to be done about it:
+                   switching Type to Polygon makes After Effects delete any
+                   expression on Inner Radius, reset it to 50 and set
+                   canSetExpression to false. Setting it first does not help --
+                   the switch wipes it either way, and switching back to Star
+                   does not bring it back. A polygon ignores the value, so this
+                   only shows if someone flips the Type by hand afterwards. */
+                setProp(poly, ["ADBE Vector Star Type"], POLYSTAR.polygon);
+                setProp(poly, ["ADBE Vector Star Points"], numPts);
+                setProp(poly, ["ADBE Vector Star Rotation"], 90);
+                setExpr(poly, ["ADBE Vector Star Outer Radius"], OUTER_EXPR);
                 if (roundCorners) {
-                    try { (poly.property("ADBE Vector Star Outer Roundness") || poly.property(6)).setValue(15); } catch(eP5) {}
+                    setProp(poly, ["ADBE Vector Star Outer Roundess", "ADBE Vector Star Outer Roundness"], 15);
                 }
                 break;
         }
@@ -2046,6 +2114,7 @@
      */
     function headToLineLayers(comp, layers, headType, roundCorners, doubleSided, reverseDir, doAnimate, animFrames) {
         var made = [];
+        var replaced = [];
         var skipped = [];
         app.beginUndoGroup("LazyMotion: Head to Line");
         try {
@@ -2060,6 +2129,21 @@
                 if (!rootVec || rootVec.numProperties === 0) {
                     skipped.push(lineLayer.name + " (no path on it)");
                     continue;
+                }
+
+                // A second click is a change of mind, not a second arrow.
+                var lineName = lineLayer.name;
+                var kept = removeExistingHeads(comp, lineName);
+                if (kept.removed) {
+                    replaced.push(lineName);
+                    // Removing the old heads shifted the indices under it.
+                    var freshIdx = findLayerIdx(comp, lineName);
+                    if (!freshIdx) {
+                        skipped.push(lineName + " (lost track of the line)");
+                        continue;
+                    }
+                    lineLayer = comp.layer(freshIdx);
+                    rootVec = lineLayer.property("ADBE Root Vectors Group");
                 }
 
                 // Animate with Trim Paths if requested
@@ -2104,10 +2188,10 @@
 
                 // Create Head Layer(s)
                 var lineName = lineLayer.name;
-                createHeadShape(comp, lineLayer, headType, roundCorners, false, reverseDir);
+                createHeadShape(comp, lineLayer, headType, roundCorners, false, reverseDir, kept);
                 made.push(lineName + " - Head");
                 if (doubleSided) {
-                    createHeadShape(comp, lineLayer, headType, roundCorners, true, reverseDir);
+                    createHeadShape(comp, lineLayer, headType, roundCorners, true, reverseDir, kept);
                     made.push(lineName + " - Head Start");
                 }
             }
@@ -2116,7 +2200,7 @@
         } finally {
             app.endUndoGroup();
         }
-        return { made: made, skipped: skipped };
+        return { made: made, replaced: replaced, skipped: skipped };
     }
 
     function executeHeadToLine(headType, roundCorners, doubleSided, reverseDir, doAnimate, animFrames) {
@@ -2277,12 +2361,105 @@
     // ============================================================
 
     /**
+     * Move every keyframe on one property along the timeline by `delta`
+     * seconds, easing and all.
+     *
+     * After Effects has no "shift these keys" call, so each key is read out,
+     * the lot is cleared, and they are written back at their new times. The
+     * order matters: interpolation type first, then the temporal ease (which
+     * only sticks on a Bezier key), then roving, which recomputes the times of
+     * the keys around it and so has to come last.
+     */
+    function shiftKeyframes(prop, delta) {
+        var n = 0;
+        try { n = prop.numKeys; } catch (eN) { return 0; }
+        if (!n) return 0;
+
+        var keys = [];
+        for (var k = 1; k <= n; k++) {
+            var K = {
+                time: prop.keyTime(k),
+                value: prop.keyValue(k),
+                inType: prop.keyInInterpolationType(k),
+                outType: prop.keyOutInterpolationType(k)
+            };
+            try { K.inEase = prop.keyInTemporalEase(k); K.outEase = prop.keyOutTemporalEase(k); } catch (eE) {}
+            try { K.continuous = prop.keyTemporalContinuous(k); } catch (eC) {}
+            try { K.autoBezier = prop.keyTemporalAutoBezier(k); } catch (eB) {}
+            try { K.roving = prop.keyRoving(k); } catch (eR) {}
+            try {
+                if (prop.isSpatial) {
+                    K.inSpatial = prop.keyInSpatialTangent(k);
+                    K.outSpatial = prop.keyOutSpatialTangent(k);
+                    K.spatialContinuous = prop.keySpatialContinuous(k);
+                    K.spatialAutoBezier = prop.keySpatialAutoBezier(k);
+                }
+            } catch (eS) {}
+            keys.push(K);
+        }
+
+        while (prop.numKeys > 0) prop.removeKey(1);
+        for (var w = 0; w < keys.length; w++) {
+            prop.setValueAtTime(keys[w].time + delta, keys[w].value);
+        }
+        for (var r = 0; r < keys.length; r++) {
+            var idx = r + 1, K2 = keys[r];
+            try { prop.setInterpolationTypeAtKey(idx, K2.inType, K2.outType); } catch (e1) {}
+            if (K2.inEase && K2.outEase) {
+                try { prop.setTemporalEaseAtKey(idx, K2.inEase, K2.outEase); } catch (e2) {}
+            }
+            try { if (K2.continuous !== undefined) prop.setTemporalContinuousAtKey(idx, K2.continuous); } catch (e3) {}
+            try { if (K2.autoBezier !== undefined) prop.setTemporalAutoBezierAtKey(idx, K2.autoBezier); } catch (e4) {}
+            try {
+                if (prop.isSpatial && K2.inSpatial && K2.outSpatial) {
+                    prop.setSpatialContinuousAtKey(idx, K2.spatialContinuous);
+                    prop.setSpatialAutoBezierAtKey(idx, K2.spatialAutoBezier);
+                    prop.setSpatialTangentsAtKey(idx, K2.inSpatial, K2.outSpatial);
+                }
+            } catch (e5) {}
+        }
+        // Roving last: it moves its neighbours' times to keep the speed even.
+        for (var v = 0; v < keys.length; v++) {
+            try { if (keys[v].roving) prop.setRovingAtKey(v + 1, true); } catch (e6) {}
+        }
+        return keys.length;
+    }
+
+    /** Every keyframe on a layer, wherever it lives, moved by `delta` seconds. */
+    function shiftLayerKeys(layer, delta) {
+        var moved = 0;
+        function walk(group) {
+            var count = 0;
+            try { count = group.numProperties; } catch (eC) { return; }
+            for (var i = 1; i <= count; i++) {
+                var p;
+                try { p = group.property(i); } catch (eG) { continue; }
+                if (!p) continue;
+                var isLeaf = false;
+                try { isLeaf = (p.propertyType === PropertyType.PROPERTY); } catch (eT) { continue; }
+                if (!isLeaf) { walk(p); continue; }
+                try {
+                    if (!p.canVaryOverTime || p.numKeys === 0) continue;
+                    moved += shiftKeyframes(p, delta);
+                } catch (eP) {}
+            }
+        }
+        walk(layer);
+        return moved;
+    }
+
+    /**
      * Engine: step the selected layers apart in time, one step each, down the
      * timeline. Each layer keeps its own start; only the spacing is added, so
      * whatever you had built stays built and Undo puts it straight back.
      * A negative step closes the spread up again.
+     *
+     * `keysOnly` moves the keyframes and leaves the layer bar where it is,
+     * which is what you want when the layers run the whole comp and only the
+     * animation should cascade. Otherwise the layer itself moves, and its
+     * keyframes ride along with it because they are stored against its start.
      */
-    function staggerLayers(comp, layers, frames, reverse) {
+    function staggerLayers(comp, layers, frames, reverse, keysOnly) {
         var moved = [];
         var skipped = [];
         app.beginUndoGroup("LazyMotion: Stagger");
@@ -2303,8 +2480,17 @@
             // Nothing is added or removed here, so the layer references stay good.
             var step = frames / comp.frameRate;
             for (var t = 0; t < targets.length; t++) {
+                if (t === 0) { moved.push(targets[t].name); continue; }  // the first one sets the beat
                 try {
-                    targets[t].startTime += t * step;
+                    if (keysOnly) {
+                        var n = shiftLayerKeys(targets[t], t * step);
+                        if (!n) {
+                            skipped.push(targets[t].name + " (no keyframes on it)");
+                            continue;
+                        }
+                    } else {
+                        targets[t].startTime += t * step;
+                    }
                     moved.push(targets[t].name);
                 } catch (eMove) {
                     skipped.push(targets[t].name + " (" + eMove.toString() + ")");
@@ -2316,7 +2502,7 @@
         return { moved: moved, skipped: skipped };
     }
 
-    function executeStagger(frames, reverse) {
+    function executeStagger(frames, reverse, keysOnly) {
         var comp = app.project.activeItem;
         if (!comp || !(comp instanceof CompItem)) {
             alert("Please open a composition first.");
@@ -2327,7 +2513,7 @@
             alert("Select at least two layers to stagger.");
             return;
         }
-        reportSkipped("Stagger", staggerLayers(comp, selected, frames, reverse).skipped);
+        reportSkipped("Stagger", staggerLayers(comp, selected, frames, reverse, keysOnly).skipped);
     }
 
     /** A name no layer in `comp` is using yet, so two nulls never collide. */
@@ -4090,14 +4276,7 @@
         styleBtn(btnStagger, "⇥ Stagger", "default", 30);
         btnStagger.preferredSize.width = 10;
         btnStagger.alignment = ["fill", "center"];
-        btnStagger.helpTip = "Step the selected layers apart in time, top to bottom. Each keeps its own start, so only the spacing is added; a negative number closes it up again.";
-
-        var inputStagger = staggerCol.add("edittext", undefined, "4");
-        inputStagger.characters = 3;
-        inputStagger.helpTip = "Frames between one layer and the next";
-        remember("StaggerFrames", inputStagger, "text");
-        var chkStaggerRev = remember("StaggerReverse", createCheckbox(staggerCol, "Rev", false, true), "check");
-        chkStaggerRev.helpTip = "Start from the bottom layer instead of the top";
+        btnStagger.helpTip = "Step the selected layers apart in time, top to bottom. Only the spacing is added, so a stack that is already animated keeps its timing; a negative number closes it up again.";
 
         var nullCol = tRow3.add("group");
         nullCol.orientation = "row";
@@ -4111,10 +4290,35 @@
         btnNullParent.alignment = ["fill", "center"];
         btnNullParent.helpTip = "Put one null on top, centred on the selection, with everything selected parented to it. A layer whose own parent is also selected is left as it is.";
 
+        // The stagger options get their own line: four controls crammed into
+        // half a docked panel is where the layout falls apart.
+        var tRow3b = toolsGrid.add("group");
+        tRow3b.orientation = "row";
+        tRow3b.alignChildren = ["left", "center"];
+        tRow3b.spacing = 6;
+
+        var stagLbl = tRow3b.add("statictext", undefined, "Stagger by");
+        stagLbl.graphics.font = ScriptUI.newFont("sans", "REGULAR", 9);
+        try { stagLbl.graphics.foregroundColor = tRow3b.graphics.newPen(tRow3b.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e) {}
+
+        var inputStagger = tRow3b.add("edittext", undefined, "4");
+        inputStagger.characters = 3;
+        inputStagger.helpTip = "Frames between one layer and the next";
+        remember("StaggerFrames", inputStagger, "text");
+
+        var stagLbl2 = tRow3b.add("statictext", undefined, "frames");
+        stagLbl2.graphics.font = ScriptUI.newFont("sans", "REGULAR", 9);
+        try { stagLbl2.graphics.foregroundColor = tRow3b.graphics.newPen(tRow3b.graphics.PenType.SOLID_COLOR, C.textMuted, 1); } catch (e2) {}
+
+        var chkStaggerRev = remember("StaggerReverse", createCheckbox(tRow3b, "Rev", false, true), "check");
+        chkStaggerRev.helpTip = "Start from the bottom layer instead of the top";
+        var chkStaggerKeys = remember("StaggerKeys", createCheckbox(tRow3b, "Keys only", false, true), "check");
+        chkStaggerKeys.helpTip = "Move the keyframes and leave the layer bars where they are — for layers that run the whole comp and only their animation should cascade. Off, the whole layer moves and its keyframes go with it.";
+
         btnStagger.onClick = function () {
             var f = parseFloat(inputStagger.text);
             if (isNaN(f) || f === 0) return alert("Enter how many frames to put between the layers.");
-            executeStagger(f, chkStaggerRev.value);
+            executeStagger(f, chkStaggerRev.value, chkStaggerKeys.value);
         };
         btnNullParent.onClick = executeNullParent;
 
@@ -4650,6 +4854,9 @@
             aeColorToHex: aeColorToHex,
             layerHasParent: layerHasParent,
             staggerLayers: staggerLayers,
+            shiftLayerKeys: shiftLayerKeys,
+            shiftKeyframes: shiftKeyframes,
+            removeExistingHeads: removeExistingHeads,
             nullParentLayers: nullParentLayers,
             freeLayerName: freeLayerName,
             headToLineLayers: headToLineLayers,

@@ -23,6 +23,7 @@ var targets = [
   "tools\\ae-autobox-perf.jsx",
   "tools\\ae-autobox-unicode.jsx",
   "tools\\ae-headline-test.jsx",
+  "tools\\ae-headline-render.jsx",
   "tools\\ae-ui-test-audio.jsx",
   "tools\\ae-ui-test-panel.jsx"
 ];

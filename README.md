@@ -1,26 +1,38 @@
-# ⚡ LazyMotionToolkit — All-in-One Motion Graphics Suite for After Effects
+<div align="center">
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Adobe%20After%20Effects-2020--2026+-9999FF?style=for-the-badge&logo=adobeaftereffects&logoColor=white" alt="AE Support" />
-  <img src="https://img.shields.io/badge/Type-ScriptUI%20Dockable%20Panel-orange?style=for-the-badge" alt="Panel Type" />
-  <img src="https://img.shields.io/badge/Engine-ExtendScript%20ES3-blue?style=for-the-badge" alt="ExtendScript" />
-  <img src="https://img.shields.io/badge/License-MIT%20%C2%B7%20Free-yellow?style=for-the-badge" alt="MIT License" />
-  <img src="https://img.shields.io/badge/Developed%20By-RaisulSohan-00E676?style=for-the-badge&logo=github" alt="Developer" />
-</p>
+<img src="assets/banner.svg" alt="LazyMotionToolkit — All-in-One Motion Graphics Suite for After Effects" width="820">
 
-<p align="center">
-  <strong>The ultimate Swiss Army Knife for After Effects motion designers. Combines smart boundary-aware precomposing, non-distorting auto text boxes, advanced mathematical fade animators, interactive 9-point anchor alignment, grid generation, live color palettes, a lightning generator and background preview renders in a single dockable panel.</strong>
-</p>
+# LazyMotionToolkit — The All-in-One Motion Graphics Suite for After Effects
 
-<p align="center">
-  <a href="https://raisulsohan.com"><strong>🌐 raisulsohan.com</strong></a> • 
-  <a href="#-key-features">Features</a> • 
-  <a href="#-installation">Installation</a> • 
-  <a href="#-development--tests">Tests</a> • 
-  <a href="#-author--credits">Credits</a>
-</p>
+**Everything you need for rapid motion design workflows in Adobe After Effects — free forever.**
 
-Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.11** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+Smart boundary-aware precomposing, dynamic auto-sizing text boxes with animated carets, math-curved fade animators,
+animated arrowhead paths, interactive 9-point anchor alignment, procedural lightning FX, and background H.264 preview rendering — all in a single dockable ScriptUI panel.
+
+<a href="assets/demo.mp4">
+  <img src="assets/demo.gif" alt="LazyMotionToolkit in action: smart precomping, text boxes, head to line, anchor rigging, lightning, and background render" width="820">
+</a>
+
+[![Download LazyMotionToolkit](https://img.shields.io/github/v/release/raisulsohan/LazyMotionToolkit?label=Download&style=for-the-badge&color=5865f2&labelColor=1a1a1a)](../../releases/latest)
+[![Adobe After Effects](https://img.shields.io/badge/Adobe%20After%20Effects-2020--2026+-9999FF?style=for-the-badge&logo=adobeaftereffects&logoColor=white)](https://raisulsohan.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-2ea043?style=for-the-badge&labelColor=1a1a1a)](LICENSE)
+[![Windows and macOS](https://img.shields.io/badge/Windows-%C2%B7%20macOS-444?style=for-the-badge&labelColor=1a1a1a)](#-installation)
+
+**[Download & Install](#-installation) · [Key Features](#-key-features) · [What's New in 1.12](#-whats-new-in-112) · [Development & Tests](#-development--tests)**
+
+Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.12** · Free & open source ([MIT](LICENSE)) · [Changelog](CHANGELOG.md)
+
+**Need help or have suggestions?** [Email me](mailto:lettertosohan@gmail.com?subject=LazyMotionToolkit%20Feedback) at **lettertosohan@gmail.com** or visit **[raisulsohan.com](https://raisulsohan.com)**.
+
+</div>
+
+---
+
+## 🆕 What's New in 1.12
+
+- **Official Brand Logo & Visual Overhaul.** Embedded the official Sleeping Cat on Diamond Keyframe logo mark directly into the ScriptUI panel header.
+- **Hero Brand Banner & Animated Demos.** Full high-resolution SVG banner (`assets/banner.svg`), interactive feature demo GIF, and 60fps MP4 video added to documentation.
+- **LazyLord-style Documentation Layout.** Streamlined header with quick access links, release badge, and video presentation.
 
 ---
 

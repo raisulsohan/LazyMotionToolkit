@@ -2,6 +2,13 @@
 
 All notable changes to LazyMotionToolkit.
 
+## 1.12.0
+
+### ✨ Branding & Visuals
+- **Official Brand Identity:** Integrated the official Sleeping Cat on Diamond Keyframe logo into the panel header with automatic high-DPI asset extraction.
+- **Hero Brand Banner & Animated Demo:** Added high-resolution SVG hero banner and full animated feature demo GIF and 60fps MP4 video to documentation.
+- **Documentation Overhaul:** Rebuilt repository documentation matching LazyLord's high-impact layout and visual hierarchy.
+
 ## 1.11.0
 
 ### 🐛 Bug Fixes

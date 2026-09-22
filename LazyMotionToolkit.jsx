@@ -18,8 +18,40 @@
     var _scriptName       = "LazyMotionToolkit";
     var _scriptAuthor     = "Raisul Sohan";
     var _authorWebsite    = "https://raisulsohan.com";
-    var _buildVersion     = "1.11.0";
+    var _buildVersion     = "1.12.0";
     var _settingsSection  = "LazyMotionToolkit_Data";
+
+    // 32x32 Official Brand Logo Icon (PNG Base64)
+    var _brandLogoB64 = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAACXBIWXMAAAABAAAAAQBPJcTWAAAHlUlEQVR4nK2WCWybZxnHLURLqqZxbH+nP9+O7yOfz/g+Yjs+YsdXHB+JYyfxlYNsadeuoyltQ+m5wTat3ejatVMH7aaOay2IZaBV2sQoq1rGitKhoUGZxGBlY2WUMqTxOi4jaZ0OJj79ZH2X3//3f97nfd6HguKsOhjnfwVB2U3uN0ZbAuUzDN0YnUnw/x8COAtGmTAMQxAEwyiK4hjGBL8Q7nH33C2RddMYyjvHYEUBMBCCYHRYwBOSMnJEpS/L1AGcY4IgBCjJVENiedYfXr+ObgLyGIb9dw6WPKDDPA5faQueSZcuDlRuADLVd6PDVxy+TRAR9sZP92bm0+UFV99ZhdrTzpDCCISg8LJxbjq4zSCGo/VXueOZ4jPZ2kfpyo1s5a/p0gcDpfdytWve+HNd3m+lax9kxq+lyh9man/PVX+pdz9rcm7WmGYwnIdi3E9xgKDgnOuNn8tPXMlUrvhTr9n8pxP5c7nqVYDKfDRZeDk2fMHe+0Jq5J1M6V3gLF35k0JTVutrt0eCckvcAVRIrSBD2er7A6Wr6fKfE8V3EkMvaqxHE4UFIEnankoWfpou/86XvBjNv5Eovpkc+SN409mziYYFUAwBAVgusCRE2OLRSrO6fHdlx6+nytdAZADDk7/vSb5qDfx47O63Hb3fNvlODk++1ZN8Rdn19Wju+8buU8nCzyRKLxUCGcVcZCUBHAWspXuCsR3Z8Rvp6vV0CWhcG574jSP0E6398d6B09nyz9WWY57omcTwS/bQ2UThV4WJt5yhF+uhXx795QKLfCIQis+lRn/dHX1lsHY9V/3b0PjVQOqyp/dhsXpjOPsaMGTxPEKa93WHTwLs3nsQdqQemuXf3kxg8VhL73b57y3U5hHueqW20mWf0Vp2Guy77d6NAlkOYcWcvvvSY5fCmXMwu+iLPBhIPsDgZDChkM5mf4oAzGQiBEFjOSTa/vJd5ySa+4WK9ZHU4Z74047gkzQs7gt/1de7jQoHlbppX3i3VDWuN29k6P1CbxrXGltFsmZZtOSCRnAQnhAxuFCjO5I9G8+/LNUdG6q+Xp6+JO482Gk5MTJ1uTi5AE5E6hlv5MHY4KXk8AK3e5TjHhHEEi1GE8YWQHgzAQyr08buwCRqZiiM9AT4yn1j06/646eUxofMri0S9Xiu+iFgsPqXXOV9nnyTL/r44MTH2drH+anzIv2Bxr8wsYLKFjRGayLQyhcTpEFo87RJ1FxBXGsoFabe7s38QiBOq7VjFvd+g22X3vaVLucutS6Fshxd9q1G26zFsUNv2rJWqBJafbiKbOUJVxRYxxMTar3AHmiVaE2OL1vdO6T6w9ny+fzEeZXlCMoJO3wburoPAsyuaXDZ5dpt7t7r8Ow3WObaxKTA4m0IrBiiujuxAg4GWbEYX7srVXk+2H9KRO6J5y8Xp/5g83/T4juem/jH4ORHzsA35LqdQ7V/AlKVF9jqnexojOHrwTvkNFazEDWAcC7GFn7BaODHojz/RkVie678Zjh9QUI+mq+cH55cEOuOJUdez1bfYIk2h1MnhyvvxTK/pVvjwvAoJxRZrTVgLD6EsZs4WAq1Q4Gp9GR2l25oLyHfmq3NO4NPaawHw/1PK/V7h2oX3ZEzhGjP6NSF5OgZpmwWHUghqX7Y10tz+1FuB61pFi3bCTApS6AlB7dzgtMdkbF2c3Rw5EcW12MQezpd/F7xixfZ8gc84e+miy9RTTFRXwWKxls8PvjAIc4Tx5k68ypOB46yAE1Xcr2agl1QpvBqeqp0SQCJR/H+hICcSRSfZInnUoX5RO45QjgLLrmqaWYiiUZjqzRG1BMQnni2/ZFDzE59C1twJwFQatfR1LqufrkmQscNLQYDv69PFC4g9linbpPVOWeybdMYNtNt0Y6+EUE4sqqTbLHZZPk8TaNvU2tQggfjt+zJSxcah4fLFJgxIfOPqToDwApVKGaqNXA8xRzI8WUWnK9FuCRfbiUGMnAssUZhYjvDvqkTbO82kuxDED3YxutfuaRg3BQgUBYoQxSVRlGd1Bx9fs29D+v0URpdBTFZOJe/xmDhheNykCdi2efFMmkowglFV2u7VLYt9vB+BZnji2MK/QZXcA+Hr6VBoiaTTKCgzuEUmVKSHRId/0HrviOe3g2tkK3Rp7QLpLhCg7n9iNOHursRl5suinaF7jFaC1TIBENUFKGtY4gEUos5vZWhSaNsLvgyDOUAKEvt0JlcnC9eqzYiZnfv5BOEdZpBgzAEr9cvFp8hkWPKTkisBTgCc1LtFB1CP0mNVkKAiJTcx57pOPIdpta0+t+5tLyraMwH6CkYEJXwd/d9yWgtMTA3BNMANASBcJwjKzpDO+SdwTaGCtirO2zUMRYPkyqh+x/iPnq4IdC430xg8UE7xmYQPGf1hDZ3SG+ZJY2bSfN2k3uPzTOD8/pAo1dvtpbuJcAlwYOUWkStR8AJvnySb29ewKxgEErp1JGlmjh9H+IflygCBNcGOjuQKrcvz5v1ByXqrLiSlwsAKGK5fHhU98N5yux2MG/0erj/U8ju3PauLLAIjjIBFKGY6+lRfu3A50qTwDgDY98UWLlZvoV/AW3rhPLzUCDmAAAAAElFTkSuQmCC";
+
+    function getBrandLogoFile() {
+        try {
+            var f = new File(Folder.temp.fsName + "/LazyMotionToolkit_icon.png");
+            if (f.exists && f.length === 2019) return f;
+            var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+            var bytes = [];
+            var str = _brandLogoB64.replace(/[^A-Za-z0-9\+\/\=]/g, "");
+            for (var i = 0; i < str.length;) {
+                var e1 = chars.indexOf(str.charAt(i++));
+                var e2 = chars.indexOf(str.charAt(i++));
+                var e3 = chars.indexOf(str.charAt(i++));
+                var e4 = chars.indexOf(str.charAt(i++));
+                var c1 = (e1 << 2) | (e2 >> 4);
+                var c2 = ((e2 & 15) << 4) | (e3 >> 2);
+                var c3 = ((e3 & 3) << 6) | e4;
+                bytes.push(String.fromCharCode(c1));
+                if (e3 !== 64) bytes.push(String.fromCharCode(c2));
+                if (e4 !== 64) bytes.push(String.fromCharCode(c3));
+            }
+            f.encoding = "BINARY";
+            f.open("w");
+            f.write(bytes.join(""));
+            f.close();
+            return f;
+        } catch (e) {
+            return null;
+        }
+    }
 
     // ============================================================
     // 1. Color Helper Utilities
@@ -4175,10 +4207,23 @@
         brandGrp.spacing = 4;
         brandGrp.margins = 0;
 
-        var dot = brandGrp.add("statictext", undefined, "●");
-        dot.graphics.font = ScriptUI.newFont("sans", "BOLD", 10);
-        dot.preferredSize.width = 10;
-        try { dot.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.accent, 1); } catch (eD) {}
+        var logoFile = getBrandLogoFile();
+        var logoShown = false;
+        if (logoFile && logoFile.exists) {
+            try {
+                var logoImg = brandGrp.add("image", undefined, logoFile);
+                logoImg.preferredSize = [18, 18];
+                logoImg.helpTip = _scriptName + " v" + _buildVersion + "\nCreated by " + _scriptAuthor;
+                logoImg.addEventListener("mousedown", function () { openURL(_authorWebsite); });
+                logoShown = true;
+            } catch (eLogo) {}
+        }
+        if (!logoShown) {
+            var dot = brandGrp.add("statictext", undefined, "●");
+            dot.graphics.font = ScriptUI.newFont("sans", "BOLD", 10);
+            dot.preferredSize.width = 10;
+            try { dot.graphics.foregroundColor = topBar.graphics.newPen(topBar.graphics.PenType.SOLID_COLOR, C.accent, 1); } catch (eD) {}
+        }
 
         var titleTxt = brandGrp.add("statictext", undefined, _scriptName);
         titleTxt.graphics.font = ScriptUI.newFont("sans", "BOLD", 11);

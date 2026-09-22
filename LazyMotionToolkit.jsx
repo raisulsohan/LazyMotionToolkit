@@ -3955,12 +3955,21 @@
 
         /** Both columns of every registered pair get exactly half the panel. */
         function syncColumns() {
-            var total = 0;
-            if (win.size && win.size[0] > 0) total = win.size[0];
-            else if (win.preferredSize && win.preferredSize[0] > 0) total = win.preferredSize[0];
-            if (total <= 0) total = MIN_COL_W * 2 + PANEL_MARGIN * 2 + COL_SPACING;
+            var availW = 0;
+            if (typeof toolsGrid !== "undefined" && toolsGrid && toolsGrid.size && toolsGrid.size[0] > 0) {
+                availW = toolsGrid.size[0];
+            } else if (typeof twoCol1 !== "undefined" && twoCol1 && twoCol1.size && twoCol1.size[0] > 0) {
+                availW = twoCol1.size[0];
+            } else {
+                var total = 0;
+                if (win.size && win.size[0] > 0) total = win.size[0];
+                else if (win.preferredSize && win.preferredSize[0] > 0) total = win.preferredSize[0];
+                var m = win.margins;
+                var horizMargins = m ? (m[0] + m[2]) : (PANEL_MARGIN * 2);
+                availW = (total > 0) ? (total - horizMargins) : (MIN_COL_W * 2 + COL_SPACING);
+            }
 
-            var colW = Math.floor((total - PANEL_MARGIN * 2 - COL_SPACING) / 2);
+            var colW = Math.floor((availW - COL_SPACING) / 2);
             if (colW < MIN_COL_W) colW = MIN_COL_W;
             lastColW = colW;
 
@@ -4270,11 +4279,13 @@
         toolsGrid.orientation = "column";
         toolsGrid.alignChildren = ["fill", "center"];
         toolsGrid.spacing = 3;
+        toolsGrid.margins = 0;
 
         var tRow1 = toolsGrid.add("group");
         tRow1.orientation = "row";
         tRow1.alignChildren = ["fill", "center"];
         tRow1.spacing = COL_SPACING;
+        tRow1.margins = 0;
         var btnPrecompIndiv = tRow1.add("iconbutton", undefined, undefined);
         styleBtn(btnPrecompIndiv, "⊞ Precomp (1:1)", "default", 30);
         btnPrecompIndiv.preferredSize.width = 10;
@@ -4288,11 +4299,13 @@
         btnPrecompGroup.alignment = ["fill", "center"];
         btnPrecompGroup.helpTip = "Precompose All Selected Layers Combined into ONE Single Precomp";
         btnPrecompGroup.onClick = executeGroupPrecomp;
+        registerColumnPair(btnPrecompIndiv, btnPrecompGroup);
 
         var tRow2 = toolsGrid.add("group");
         tRow2.orientation = "row";
         tRow2.alignChildren = ["fill", "center"];
         tRow2.spacing = COL_SPACING;
+        tRow2.margins = 0;
         var btnAutoBox = tRow2.add("iconbutton", undefined, undefined);
         styleBtn(btnAutoBox, "⊡ Auto Box", "default", 30);
         btnAutoBox.preferredSize.width = 10;
@@ -4306,16 +4319,19 @@
         btnGrid.alignment = ["fill", "center"];
         btnGrid.helpTip = "Open Grid Designer to create Rows, Columns, and Layouts";
         btnGrid.onClick = showGridMakerDialog;
+        registerColumnPair(btnAutoBox, btnGrid);
 
         var tRow3 = toolsGrid.add("group");
         tRow3.orientation = "row";
         tRow3.alignChildren = ["fill", "center"];
         tRow3.spacing = COL_SPACING;
+        tRow3.margins = 0;
 
         var staggerCol = tRow3.add("group");
         staggerCol.orientation = "row";
         staggerCol.alignChildren = ["fill", "center"];
         staggerCol.spacing = 4;
+        staggerCol.margins = 0;
 
         var btnStagger = staggerCol.add("iconbutton", undefined, undefined);
         styleBtn(btnStagger, "⇥ Stagger", "default", 30);
@@ -4327,6 +4343,7 @@
         nullCol.orientation = "row";
         nullCol.alignChildren = ["fill", "center"];
         nullCol.spacing = 4;
+        nullCol.margins = 0;
         registerColumnPair(staggerCol, nullCol);
 
         var btnNullParent = nullCol.add("iconbutton", undefined, undefined);
@@ -4450,6 +4467,7 @@
         twoCol1.orientation = "row";
         twoCol1.alignChildren = ["fill", "bottom"];
         twoCol1.spacing = COL_SPACING;
+        twoCol1.margins = 0;
 
         // -- Left: Head to Line Form --
         var headCol = twoCol1.add("group");
@@ -4457,6 +4475,7 @@
         headCol.alignChildren = ["fill", "top"];
         headCol.spacing = 4;
         headCol.alignment = ["fill", "bottom"];
+        headCol.margins = 0;
 
         var hTypeRow = headCol.add("group");
         hTypeRow.orientation = "row";
@@ -4510,6 +4529,7 @@
         anchorCol.alignChildren = ["fill", "top"];
         anchorCol.spacing = 4;
         anchorCol.alignment = ["fill", "bottom"];
+        anchorCol.margins = 0;
         registerColumnPair(headCol, anchorCol);
 
         var activeAnchorIdx = 4; // Default to Center '●'
@@ -4569,6 +4589,7 @@
         twoCol2.orientation = "row";
         twoCol2.alignChildren = ["fill", "bottom"];
         twoCol2.spacing = COL_SPACING;
+        twoCol2.margins = 0;
 
         // -- Left: Fade Form --
         var fadeCol = twoCol2.add("group");
@@ -4576,6 +4597,7 @@
         fadeCol.alignChildren = ["fill", "top"];
         fadeCol.spacing = 4;
         fadeCol.alignment = ["fill", "bottom"];
+        fadeCol.margins = 0;
 
         var fParamsRow = fadeCol.add("group");
         fParamsRow.orientation = "row";
@@ -4652,6 +4674,7 @@
         swatchCol.alignChildren = ["fill", "top"];
         swatchCol.spacing = 4;
         swatchCol.alignment = ["fill", "bottom"];
+        swatchCol.margins = 0;
         registerColumnPair(fadeCol, swatchCol);
 
         // ---- Dropdown helpers ----
@@ -4855,6 +4878,7 @@
             if (inResize) return;
             inResize = true;
             try {
+                this.layout.layout(true);
                 syncColumns();
                 // Rewrap the swatch grid only when the number that fits changed.
                 if (swatchCols() !== lastFitCols) {
@@ -4872,12 +4896,15 @@
         if (win instanceof Window) {
             win.center();
             win.show();
+            win.layout.layout(true);
             syncColumns();          // the real width is known only after show()
             buildingUI = false;
             renderSwatches();
         } else {
             win.layout.layout(true); // docked panel: get its real width first
             syncColumns();
+            win.layout.layout(true);
+            win.layout.resize();
             buildingUI = false;
             renderSwatches();
         }

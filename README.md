@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/banner.svg" alt="LazyMotionToolkit — All-in-One Motion Graphics Suite for After Effects" width="820">
+<img src="assets/banner.png" alt="LazyMotionToolkit — All-in-One Motion Graphics Suite for After Effects" width="820">
 
 # LazyMotionToolkit — The All-in-One Motion Graphics Suite for After Effects
 
@@ -31,7 +31,7 @@ Developed by **[Raisul Sohan](https://raisulsohan.com)** · **Version 1.12** · 
 ## 🆕 What's New in 1.12
 
 - **Official Brand Logo & Visual Overhaul.** Embedded the official Sleeping Cat on Diamond Keyframe logo mark directly into the ScriptUI panel header.
-- **Hero Brand Banner & Animated Demos.** Full high-resolution SVG banner (`assets/banner.svg`), interactive feature demo GIF, and 60fps MP4 video added to documentation.
+- **Hero Brand Banner & Animated Demos.** Full high-resolution brand banner (`assets/banner.png` & `assets/banner.svg`), interactive feature demo GIF, and 60fps MP4 video added to documentation.
 - **LazyLord-style Documentation Layout.** Streamlined header with quick access links, release badge, and video presentation.
 
 ---
